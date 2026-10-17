@@ -287,6 +287,8 @@ nav.tabs button{font-size:11px;padding-inline:2px}
 .tallyhead .meta b{font-weight:600}
 .tallyhead .row .btn{flex:1}
 .tallyhead .btn.ghost{color:var(--navy-ink);box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
+.who[data-sync]::after{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:7px;vertical-align:1px;background:var(--ok)}
+.who[data-sync="busy"]::after{background:var(--accent)}.who[data-sync="off"]::after{background:var(--muted)}.who[data-sync="err"]::after{background:var(--bad)}
 .search{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 12px;font-size:15px;margin-bottom:12px}
 </style>
 
@@ -353,6 +355,12 @@ nav.tabs button{font-size:11px;padding-inline:2px}
 <div id="sheetHost"></div>
 <div id="toastHost"></div>
 
+<script type="module">
+const B="https://www.gstatic.com/firebasejs/10.12.2/";
+try{const [a,au,fs]=await Promise.all([import(B+"firebase-app.js"),import(B+"firebase-auth.js"),import(B+"firebase-firestore.js")]);
+  window.FBX={a,au,fs};window.dispatchEvent(new Event("fbx-ready"))}
+catch(e){window.FBX_ERR=e;window.dispatchEvent(new Event("fbx-fail"))}
+</script>
 <script>
 (function(){
 "use strict";
@@ -396,7 +404,7 @@ function save(){clearTimeout(saveT);saveT=setTimeout(()=>{
   const v=JSON.parse(JSON.stringify(R));
   if(db){try{db.transaction(ST,"readwrite").objectStore(ST).put(v,"state");return}catch(e){}}
   try{localStorage.setItem("sof-state",JSON.stringify(v))}catch(e){}
-},250)}
+},250);try{if(online())schedulePush()}catch(e){}}
 
 /* ---------- model ---------- */
 // R = { vessels:[{id,name,imo,flag,holds:[{id,name,cap}]}], sofs:[{id,vesselId,created,voyage,events,holds,entries}], cur, example }
@@ -454,7 +462,7 @@ const vesselOf=s=>s?R.vessels.find(v=>v.id===s.vesselId)||{name:"?",holds:[],mem
 let SES=null; // {role:"cap"|"staff", id}
 const isCap=()=>!!(SES&&SES.role==="cap");
 const me=()=>SES?(SES.role==="cap"?"cap":SES.id):null;
-const capName=()=>(R.auth&&R.auth.name)||"Kaptan";
+const capName=()=>(SES&&SES.online&&SES.role==="cap"&&SES.name)||(R.auth&&R.auth.name)||"Kaptan";
 function mName(v,id){if(id==="cap")return capName();const m=(v.members||[]).find(x=>x.id===id);return m?m.name:"Belirtilmemiş"}
 // per-member totals for one SOF: {id:{ev,mt,tally:{tallyId:qty},n}}
 function memberStats(s){const o={};const g=id=>o[id||""]||(o[id||""]={ev:0,mt:0,tally:{},n:0});
@@ -496,7 +504,7 @@ const gate=msg=>`<div class="gate"><p style="margin:0">${msg||"Önce bir gemi ve
 function wireGate(){$$("[data-gofleet]").forEach(b=>b.onclick=()=>go("fleet"))}
 
 /* ---------- header ---------- */
-function renderHeader(){const s=cur(),v=vesselOf(s);
+function renderHeader(){try{if(online()){subscribeActive();setTimeout(updateSyncUI,0)}}catch(e){}const s=cur(),v=vesselOf(s);
   $("#hdrVessel").textContent=s?[v.name,s.voyage.port,fD(span(s)[0])].filter(Boolean).join(" · "):"Gemi seçilmedi — dokunun";
   const wb=$("#whoBtn");wb.hidden=!SES;
   if(SES){wb.textContent=(isCap()?"⚓ ":"")+mName(v||{members:[]},me());wb.classList.remove("none")}
@@ -544,7 +552,9 @@ function membersSheet(vid){const v=R.vessels.find(x=>x.id===vid);const host=$("#
       ${rows.length?`<tr><th>Toplam</th><th style="text-align:right">${sum("ev")}</th><th style="text-align:right">${num(sum("mt"))}</th>${tn.map(n=>`<th style="text-align:right">${num(rows.reduce((a,id)=>a+(((agg[id]||{}).tally||{})[n]||0),0))}</th>`).join("")}</tr>`:""}
       </tbody></table></div>
       <h2 style="margin:6px 0 0">Üye listesi</h2>
-      <div class="hrows">${v.members.map((m,i)=>`<div class="hr"><input data-mn="${i}" value="${esc(m.name)}" aria-label="Ad"><input data-mr="${i}" value="${esc(m.role||"")}" placeholder="Görev" aria-label="Görev"><button class="x" data-mx="${i}" aria-label="Üyeyi çıkar">×</button></div><input class="pwin" data-mp="${i}" type="password" autocomplete="new-password" placeholder="${m.pw?"🔒 Şifre var · değiştirmek için yeni şifre yazın":"Şifre yok · giriş için şifre belirleyin"}" aria-label="${esc(m.name)} şifresi">`).join("")}</div>
+      <div class="hrows">${v.members.map((m,i)=>`<div class="hr"><input data-mn="${i}" value="${esc(m.name)}" aria-label="Ad"><input data-mr="${i}" value="${esc(m.role||"")}" placeholder="Görev" aria-label="Görev"><button class="x" data-mx="${i}" aria-label="Üyeyi çıkar">×</button></div>${online()?(m.account?`<div class="note" style="margin:0 0 8px">🔐 Giriş: <b>${esc(m.account)}</b> <button class="lk" data-acre="${i}" style="padding:0 6px">Yeni hesap aç</button></div>`
+  :`<div class="row" style="margin-bottom:8px;gap:6px"><input data-au="${i}" placeholder="kullanıcı adı" autocapitalize="none" style="flex:1.2;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:15px;min-width:0"><input data-ap="${i}" type="password" autocomplete="new-password" placeholder="şifre (en az 6)" style="flex:1;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:15px;min-width:0"><button class="btn sm pri" data-ac="${i}">Hesap aç</button></div>`)
+  :`<input class="pwin" data-mp="${i}" type="password" autocomplete="new-password" placeholder="${m.pw?"🔒 Şifre var · değiştirmek için yeni şifre yazın":"Şifre yok · giriş için şifre belirleyin"}" aria-label="${esc(m.name)} şifresi">`}`).join("")}</div>
       <div class="row"><input id="mN" placeholder="Yeni üye adı" style="flex:2;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px"><input id="mR" placeholder="Görev" style="flex:1.4;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px"><input id="mP" type="password" autocomplete="new-password" placeholder="Şifre" style="flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px"><button class="btn pri" id="mAdd">Ekle</button></div>
       <p class="note" style="margin:0">Üyeyi listeden çıkarmak geçmiş kayıtlarını silmez; tabloda “Silinmiş üye” olarak görünür.</p>
       <div class="row" style="justify-content:flex-end"><button class="btn pri" id="mClose">Tamam</button></div>
@@ -554,6 +564,10 @@ function membersSheet(vid){const v=R.vessels.find(x=>x.id===vid);const host=$("#
       host.querySelectorAll("[data-mp]").forEach(i=>{if(!i.value)return;if(i.value.length<4){toast("Şifre en az 4 karakter olmalı");return}v.members[+i.dataset.mp].pw=mkPw(i.value);toast("Şifre kaydedildi")});save()};
     $("#mSel").onchange=e=>{sync();sel=e.target.value;draw()};
     host.querySelectorAll("[data-mx]").forEach(b=>b.onclick=()=>{if(!b.dataset.c){b.dataset.c=1;b.textContent="Sil?";b.style.color="var(--bad)";b.style.fontSize="13px";return}sync();v.members.splice(+b.dataset.mx,1);save();draw()});
+    host.querySelectorAll("[data-ac]").forEach(b=>b.onclick=async()=>{sync();const i=+b.dataset.ac,m=v.members[i];b.disabled=true;b.textContent="Açılıyor…";
+      try{await createStaffAccount(v,m,host.querySelector(`[data-au="${i}"]`).value,host.querySelector(`[data-ap="${i}"]`).value);toast(`${esc(m.name)} için hesap açıldı: ${esc(m.account)}`);draw()}
+      catch(e){toast(e&&e.code==="x"?e.message:authMsg(e));b.disabled=false;b.textContent="Hesap aç"}});
+    host.querySelectorAll("[data-acre]").forEach(b=>b.onclick=()=>{const m=v.members[+b.dataset.acre];m.account="";save();draw()});
     $("#mAdd").onclick=()=>{sync();const n=$("#mN").value.trim();if(!n)return $("#mN").focus();const pw=$("#mP").value;if(pw&&pw.length<4)return toast("Şifre en az 4 karakter olmalı");
       v.members.push({id:uid(),name:n,role:$("#mR").value.trim(),pw:pw?mkPw(pw):null});save();draw()};
     $("#mClose").onclick=()=>{sync();host.innerHTML="";renderAll()};
@@ -568,8 +582,11 @@ function sofMatches(s,v){if(!Q)return true;const [a,b]=span(s);
 function renderFleet(){
   $("#exBanner").hidden=!R.example;
   const s=cur(),v=vesselOf(s);
-  $("#activeCard").innerHTML=s?`<div class="active-card"><div><span>Aktif SOF</span><b>${esc(v.name)}</b><p>${esc([s.voyage.port,s.voyage.cargo,s.voyage.voyNo].filter(Boolean).join(" · "))} · ${fD(span(s)[0])}</p></div><button class="btn pri" data-goev>Olay Bas →</button></div>`:"";
+  $("#activeCard").innerHTML=s?`<div class="active-card"><div><span>Aktif SOF</span><b>${esc(v.name)}</b><p>${esc([s.voyage.port,s.voyage.cargo,s.voyage.voyNo].filter(Boolean).join(" · "))} · ${fD(span(s)[0])}</p></div><button class="btn pri" data-goev>Olay Bas →</button></div>${online()&&isCap()?`<div class="banner" style="margin-top:-6px">${v.activeSof===s.id?"✓ Personel bu SOF’a kayıt yapıyor":"Personel şu an başka bir SOF’a kayıt yapıyor"}${v.activeSof===s.id?"":`<button class="btn sm dark" data-setactive>Bu SOF’u personele aç</button>`}</div>`:""}`:"";
+  if(FB&&!online()&&isCap())$("#activeCard").innerHTML=`<div class="banner">Ekibinizle canlı paylaşmak için internetli sisteme geçin.<button class="btn sm dark" data-goonline>Kaptan hesabı / giriş</button></div>`+$("#activeCard").innerHTML;
   if(s)$("[data-goev]").onclick=()=>go("ev");
+  {const sa=$("[data-setactive]");if(sa)sa.onclick=()=>{v.activeSof=s.id;save();renderFleet();toast("Personel artık bu SOF’a kayıt yapıyor")};
+   const go2=$("[data-goonline]");if(go2)go2.onclick=()=>{SES=null;saveSes();LOGINMODE="online";OLV="login";renderLogin()}}
   if(!R.vessels.length){$("#vesselList").innerHTML=`<div class="gate"><p style="margin:0">Henüz gemi yok. Gemiyi ve ambarlarını bir kez tanımlayın; her limanda yeni SOF açarsınız.</p><button class="btn pri" id="addV2">+ İlk gemiyi ekle</button></div>`;$("#addV2").onclick=()=>vesselSheet(null);return}
   const vs=R.vessels.slice().sort((a,b)=>a.name.localeCompare(b.name,"tr"));
   let any=false;
@@ -664,7 +681,7 @@ function sofSheet(vid){
   $("#sCancel").onclick=()=>host.innerHTML="";
   host.querySelector(".sheet-bg").onclick=e=>{if(e.target.classList.contains("sheet-bg"))host.innerHTML=""};
   $("#sSave").onclick=()=>{const s=newSof(v,{title:$("#sT").value.trim(),port:$("#sP").value.trim(),berth:$("#sB").value.trim(),cargo:$("#sC").value.trim(),op:$("#sO").value,voyNo:$("#sV").value.trim(),master:$("#sM").value.trim(),agent:last?last.voyage.agent:""});
-    R.sofs.push(s);R.cur=s.id;save();host.innerHTML="";renderHeader();toast(`${esc(v.name)} için yeni SOF açıldı`);go("ev")};
+    R.sofs.push(s);R.cur=s.id;v.activeSof=s.id;save();host.innerHTML="";renderHeader();toast(`${esc(v.name)} için yeni SOF açıldı`);go("ev")};
 }
 
 /* ---------- EVENTS (tap) ---------- */
@@ -762,8 +779,9 @@ function headCard(s,sendId){const v=vesselOf(s),op=s.voyage.op==="Discharging"?"
     <span class="ttl">${esc(sofTitle(s))}</span>
     <div class="meta"><span>🚢 <b>${esc(v.name)}</b></span>${s.voyage.port?`<span>⚓ ${esc(s.voyage.port)}${s.voyage.berth?" / "+esc(s.voyage.berth):""}</span>`:""}<span>${op}</span>${s.voyage.voyNo?`<span>Sefer ${esc(s.voyage.voyNo)}</span>`:""}<span>Başlangıç ${fD(span(s)[0])}</span></div>
     ${isCap()?"":`<div class="meta"><span>${esc(mName(v,me()))} · bu tally’de ${mineN} kaydınız var</span></div>
-    <div class="row"><button class="btn pri" id="${sendId}">Kayıtlarımı gönder</button><button class="btn ghost" data-newpack>Yeni liman / paket al</button></div>`}</div>`}
-function wireHead(sendId){const b=$("#"+sendId);if(b)b.onclick=()=>sendSheet();$$("[data-newpack]").forEach(x=>x.onclick=()=>staffNewPack())}
+    ${online()?"":`<div class="row"><button class="btn pri" id="${sendId}">Kayıtlarımı gönder</button><button class="btn ghost" data-newpack>Yeni liman / paket al</button></div>`}`}
+    ${online()?`<div class="row" style="align-items:center"><span data-syncline style="flex:1;min-width:0;font-size:13.5px">${esc(syncText())}</span><button class="btn sm ghost" data-syncnow>Şimdi eşitle</button></div>`:""}</div>`}
+function wireHead(sendId){const b=$("#"+sendId);if(b)b.onclick=()=>sendSheet();$$("[data-syncnow]").forEach(x=>x.onclick=()=>{SY.err="";pushNow();updateSyncUI()});$$("[data-newpack]").forEach(x=>x.onclick=()=>staffNewPack())}
 function staffNewPack(){const host=$("#sheetHost");const use=o=>{if(o.k!=="pack")throw{msg:"Bu bir personel kaydı, paket değil. Kaptanın Rapor → Personel paketi hazırla ekranındaki kodu kullanın."};staffConfirmPack(o)};
   host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Yeni paket"><h3>Yeni liman / paket al</h3>
     <p class="note" style="margin:0">Kaptan telefonunda yeni SOF’u açıp <b>Rapor → Personel paketi hazırla</b>’ya basmalı.</p>
@@ -986,14 +1004,14 @@ const checkPw=(o,pw)=>!!(o&&o.salt&&hashPw(pw,o.salt)===o.hash);
 
 /* ---------- session ---------- */
 function saveSes(){try{SES?localStorage.setItem("sof-ses",JSON.stringify(SES)):localStorage.removeItem("sof-ses")}catch(e){}}
-function loadSes(){try{const x=JSON.parse(localStorage.getItem("sof-ses")||"null");if(!x||!R.auth)return null;
+function loadSes(){try{const x=JSON.parse(localStorage.getItem("sof-ses")||"null");if(!x||x.online||!R.auth)return null;
   if(x.role==="cap")return x;const m=findMember(x.id);return m&&m.m.pw?x:null}catch(e){return null}}
 function findMember(id){for(const v of R.vessels){const m=(v.members||[]).find(x=>x.id===id);if(m)return{v,m}}return null}
 function enterApp(){$("#login").hidden=true;renderHeader();
   if(!isCap()){const f=findMember(SES.id);const c=cur();
     if(f&&(!c||c.vesselId!==f.v.id)){const l=R.sofs.filter(x=>x.vesselId===f.v.id).sort((a,b)=>b.created-a.created)[0];R.cur=l?l.id:null;save()}}
   renderHeader();go(isCap()?(cur()?"ev":"fleet"):"ev")}
-function logout(){SES=null;saveSes();$("#sheetHost").innerHTML="";renderLogin()}
+function logout(){if(online())return onlineLogout();SES=null;saveSes();$("#sheetHost").innerHTML="";renderLogin()}
 
 /* ---------- code transfer (no internet) ---------- */
 const enc=o=>"SOF:"+btoa(unescape(encodeURIComponent(JSON.stringify(o))));
@@ -1211,8 +1229,275 @@ function importSnapshot(o){const s=R.sofs.find(x=>x.id===o.sof);if(!s)throw{msg:
   s.sync[o.by]=o.at||Date.now();save();renderAll();
   return `${esc(sofTitle(s))}${s.id!==R.cur?" (aktif olmayan SOF)":""} ← ${esc(mName(vesselOf(s),o.by))}: ${evs?evs.length+" olay, ":""}${ents.length} sayım (${num(ents.reduce((a,b)=>a+(+b.qty||0),0))} adet) alındı`}
 
+/* =====================================================================
+   ONLINE SYNC (Firebase). Local data (R) stays the source the UI reads;
+   this layer pushes local changes in batches and merges remote changes.
+   ===================================================================== */
+const FBCONF={apiKey:"AIzaSyDjEAejLZVS3DJsKX_5Ty8fHu028r4LlYY",authDomain:"dg-sof.firebaseapp.com",projectId:"dg-sof",
+  storageBucket:"dg-sof.firebasestorage.app",messagingSenderId:"129989605648",appId:"1:129989605648:web:491792601b187514f00d95"};
+const USERDOM="dg-sof.app"; // staff log in with a username; it becomes username@dg-sof.app
+let FB=null,LOGINMODE="online",SIGNUP=false;
+const SY={unsubs:[],activeSub:null,pushT:null,pushing:false,awaiting:false,last:null,err:"",paused:false};
+try{SY.paused=localStorage.getItem("sof-paused")==="1"}catch(e){}
+const online=()=>!!(SES&&SES.online&&FB);
+function fbWait(ms){return new Promise(res=>{if(window.FBX)return res(true);if(window.FBX_ERR)return res(false);
+  const t=setTimeout(()=>res(false),ms);window.addEventListener("fbx-ready",()=>{clearTimeout(t);res(true)},{once:true});window.addEventListener("fbx-fail",()=>{clearTimeout(t);res(false)},{once:true})})}
+function fbInit(){if(FB||!window.FBX)return FB;const {a,au,fs}=window.FBX;const app=a.initializeApp(FBCONF);let fdb;
+  try{fdb=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})})}catch(e){fdb=fs.getFirestore(app)}
+  FB={a,au,fs,app,auth:au.getAuth(app),db:fdb};return FB}
+const toEmail=u=>{u=String(u||"").trim();return u.includes("@")?u:u.toLowerCase().replace(/\s+/g,"")+"@"+USERDOM};
+function authMsg(e){const c=(e&&e.code)||"";return({"auth/invalid-credential":"Kullanıcı adı / e-posta veya şifre yanlış","auth/wrong-password":"Şifre yanlış","auth/user-not-found":"Bu kullanıcı bulunamadı",
+  "auth/invalid-login-credentials":"Kullanıcı adı / e-posta veya şifre yanlış","auth/too-many-requests":"Çok fazla deneme yapıldı. Birkaç dakika bekleyin.",
+  "auth/network-request-failed":"İnternet bağlantısı yok. Giriş için bir kez internet gerekir.","auth/email-already-in-use":"Bu kullanıcı adı / e-posta zaten kullanılıyor",
+  "auth/weak-password":"Şifre en az 6 karakter olmalı","auth/invalid-email":"Geçersiz kullanıcı adı veya e-posta","auth/missing-password":"Şifreyi yazın",
+  "auth/operation-not-allowed":"Firebase’de Email/Password girişi açık değil","permission-denied":"Sunucu izin vermedi. Güvenlik kuralları yüklenmemiş olabilir."})[c]||("Hata: "+(c||(e&&e.message)||e))}
+function hsh(o){const s=JSON.stringify(o)||"";let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return(h>>>0).toString(36)+s.length.toString(36)}
+const clean=o=>JSON.parse(JSON.stringify(o));
+const SYN=()=>{const s=R.sync||(R.sync={});s.vh=s.vh||{};s.sof=s.sof||{};s.ev=s.ev||{};s.te=s.te||{};s.seen=s.seen||{};return s};
+const vPay=v=>({id:v.id,name:v.name||"",imo:v.imo||"",flag:v.flag||"",holds:v.holds||[],activeSof:v.activeSof||null,
+  members:(v.members||[]).map(m=>({id:m.id,name:m.name||"",role:m.role||"",account:m.account||"",uid:m.uid||""}))});
+const metaOf=s=>clean({vesselId:s.vesselId,created:s.created,voyage:s.voyage,holds:s.holds,tallies:s.tallies,entries:s.entries});
+const evPay=e=>({label:e.label||"",t:e.t||0,note:e.note||"",by:e.by||"cap"});
+const evHash=e=>hsh(evPay(e));
+const fpath=(...p)=>FB.fs.doc(FB.db,"fleets",SES.fleet,...p);
+const fcol=(...p)=>FB.fs.collection(FB.db,"fleets",SES.fleet,...p);
+const sofById=id=>R.sofs.find(s=>s.id===id);
+let bytesSent=0;try{bytesSent=+localStorage.getItem("sof-bytes")||0}catch(e){}
+const addBytes=o=>{bytesSent+=JSON.stringify(o).length+120;try{localStorage.setItem("sof-bytes",String(bytesSent))}catch(e){}};
+
+/* ---- sign in / out ---- */
+async function authChanged(u){if(SIGNUP)return;
+  if(u)return onlineSignedIn(u);
+  stopSync();if(SES&&SES.online){SES=null;saveSes()}
+  const ls=loadSes();if(ls){SES=ls;enterApp()}else renderLogin()}
+async function onlineSignedIn(u){const {fs}=FB;let p=null;
+  try{const sn=await fs.getDoc(fs.doc(FB.db,"users",u.uid));if(sn.exists())p=sn.data()}catch(e){}
+  if(!p){try{p=JSON.parse(localStorage.getItem("sof-prof-"+u.uid)||"null")}catch(e){}}
+  if(!p){toast("Bu hesabın profili bulunamadı. Kaptan hesabınızı yeniden açmalı.");try{await FB.au.signOut(FB.auth)}catch(e){}return}
+  try{localStorage.setItem("sof-prof-"+u.uid,JSON.stringify(p))}catch(e){}
+  if(p.role==="staff"&&R.example){R=blankRoot();normalize(R)}
+  SES={role:p.role==="cap"?"cap":"staff",id:p.role==="cap"?undefined:p.memberId,uid:u.uid,fleet:p.fleet,online:true,name:p.name||"",email:u.email};
+  SYN();if(SES.role==="cap"&&!R.vessels.length)R.sync.migrated=true;save();
+  startSync();enterApp();
+  if(SES.role==="cap"&&!R.sync.migrated)setTimeout(migrateSheet,400)}
+async function onlineLogout(){stopSync();try{await FB.au.signOut(FB.auth)}catch(e){}SES=null;saveSes();$("#sheetHost").innerHTML="";renderLogin()}
+
+/* ---- listeners ---- */
+function stopSync(){SY.unsubs.forEach(f=>{try{f()}catch(e){}});SY.unsubs=[];stopActive();clearTimeout(SY.pushT)}
+function stopActive(){(SY.activeUnsubs||[]).forEach(f=>{try{f()}catch(e){}});SY.activeUnsubs=[];SY.activeSub=null}
+function startSync(){stopSync();const {fs}=FB;applyNet();
+  SY.unsubs.push(fs.onSnapshot(fpath("state","vessels"),sn=>applyVessels(sn),e=>syncErr(e)));
+  if(isCap())SY.unsubs.push(fs.onSnapshot(fcol("sofs"),qs=>applySofs(qs),e=>syncErr(e)));
+  subscribeActive();schedulePush(3000);updateSyncUI()}
+function syncErr(e){SY.err=authMsg(e);updateSyncUI()}
+function subscribeActive(){if(!online())return;const sid=R.cur;if(SY.activeSub===sid)return;stopActive();SY.activeSub=sid;if(!sid)return;const {fs}=FB;
+  if(isCap()){
+    SY.activeUnsubs.push(fs.onSnapshot(fcol("sofs",sid,"events"),qs=>applyEvents(qs,sid),e=>syncErr(e)));
+    SY.activeUnsubs.push(fs.onSnapshot(fcol("sofs",sid,"tally"),qs=>applyTally(qs,sid),e=>syncErr(e)));
+  }else{
+    SY.activeUnsubs.push(fs.onSnapshot(fpath("sofs",sid),sn=>applySofDoc(sn,sid),e=>syncErr(e)));
+    staffFetchOwn(sid);
+  }}
+function applyVessels(sn){if(!sn.exists())return;const list=(sn.data().list)||[];const S=SYN();
+  if(!isCap()){const prev=R.cur;R.vessels=list.map(v=>Object.assign({},v));
+    const mv=R.vessels.find(v=>(v.members||[]).some(m=>m.id===SES.id));
+    if(mv&&mv.activeSof&&mv.activeSof!==R.cur){
+      if(!sofById(mv.activeSof))R.sofs.push(normalizeSof({id:mv.activeSof,vesselId:mv.id,created:Date.now(),voyage:blankVoy(),holds:[],tallies:[],entries:[],events:[],tallyEntries:[]}));
+      R.cur=mv.activeSof;if(prev)setTimeout(()=>toast("Kaptan yeni bir tally açtı. Kayıtlarınız artık yeni tally’ye gidiyor."),300)}
+    save();renderHeader();renderTab();return}
+  const rem={};list.forEach(v=>rem[v.id]=v);const out=[];
+  R.vessels.forEach(lv=>{const syn=S.vh[lv.id],lh=hsh(vPay(lv)),pend=syn!==lh;
+    if(rem[lv.id]){const rv=rem[lv.id],rh=hsh(vPay(rv));
+      if(pend&&lh!==rh)out.push(lv);
+      else{const pw={};(lv.members||[]).forEach(m=>{if(m.pw)pw[m.id]=m.pw});
+        const nv=Object.assign({},rv,{members:(rv.members||[]).map(m=>Object.assign({},m,pw[m.id]?{pw:pw[m.id]}:{}))});out.push(nv);S.vh[lv.id]=hsh(vPay(nv))}
+      delete rem[lv.id]}
+    else if(syn!==undefined&&!pend){delete S.vh[lv.id]}
+    else out.push(lv)});
+  Object.values(rem).forEach(rv=>{out.push(Object.assign({},rv));S.vh[rv.id]=hsh(vPay(rv))});
+  R.vessels=out;save();renderHeader();renderTab()}
+function normalizeSof(s){s.voyage=Object.assign(blankVoy(),s.voyage||{});s.holds=s.holds||[];s.tallies=s.tallies||[];s.entries=s.entries||[];s.events=s.events||[];s.tallyEntries=s.tallyEntries||[];return s}
+function applySofs(qs){const S=SYN();let ch=false;
+  qs.docChanges().forEach(c=>{const id=c.doc.id,l=sofById(id);
+    if(c.type==="removed"){if(l&&S.sof[id]===hsh(metaOf(l))){R.sofs=R.sofs.filter(x=>x.id!==id);delete S.sof[id];if(R.cur===id)R.cur=null;ch=true}return}
+    const m=c.doc.data();
+    if(!l){R.sofs.push(normalizeSof(Object.assign({id},m,{events:[],tallyEntries:[]})));S.sof[id]=hsh(metaOf(sofById(id)));ch=true}
+    else if(S.sof[id]===hsh(metaOf(l))||S.sof[id]===undefined&&hsh(metaOf(l))===hsh(clean(m))){Object.assign(l,m);normalizeSof(l);S.sof[id]=hsh(metaOf(l));ch=true}});
+  if(ch){save();renderHeader();renderTab()}}
+function applySofDoc(sn,sid){const S=SYN();if(!sn.exists()){toast("Bu tally kaptan tarafından silinmiş.");return}
+  let l=sofById(sid);const m=sn.data();if(!l){l=normalizeSof(Object.assign({id:sid},m,{events:[],tallyEntries:[]}));R.sofs.push(l)}else{Object.assign(l,m);normalizeSof(l)}
+  S.seen[sid]=true;save();renderHeader();renderTab()}
+function applyEvents(qs,sid){const s=sofById(sid);if(!s)return;const S=SYN(),syn=S.ev[sid]||(S.ev[sid]={});
+  const rem={};qs.forEach(d=>rem[d.id]=d.data());const loc={};s.events.forEach(e=>loc[e.id]=e);const out=[];
+  Object.keys(rem).forEach(id=>{const r=rem[id],l=loc[id];
+    if(!l&&syn[id]!==undefined)return;                       // deleted here, delete not sent yet
+    if(l&&syn[id]!==evHash(l)&&(syn[id]!==undefined||evHash(l)!==hsh(evPay(r)))){out.push(l);return} // local edit pending
+    out.push(Object.assign({},r,{id,photos:l?l.photos:[]}));syn[id]=hsh(evPay(r))});
+  Object.keys(loc).forEach(id=>{if(rem[id])return;if(syn[id]!==undefined&&syn[id]===evHash(loc[id])){delete syn[id];return}out.push(loc[id])});
+  s.events=out;save();renderTab()}
+const unpack=c=>({id:c.i,tallyId:c.k,holdId:c.h||null,qty:c.q,t:c.t,by:c.b});
+function remoteTally(docs){const adds=new Map(),dels=new Set();docs.sort((a,b)=>(a.at||0)-(b.at||0)).forEach(d=>{(d.add||[]).forEach(c=>adds.set(c.i,unpack(c)));(d.del||[]).forEach(i=>dels.add(i))});
+  return[...adds.values()].filter(x=>!dels.has(x.id))}
+function applyTally(qs,sid){const s=sofById(sid);if(!s)return;const S=SYN(),te=S.te[sid]||{};
+  const docs=[];qs.forEach(d=>docs.push(d.data()));
+  const localIds=new Set(s.tallyEntries.map(x=>x.id));const pendDel=new Set(Object.keys(te).filter(id=>!localIds.has(id)));
+  const pendAdd=s.tallyEntries.filter(x=>!(x.id in te));const remote=remoteTally(docs);const nte={};remote.forEach(x=>nte[x.id]=x.by);
+  s.tallyEntries=remote.filter(x=>!pendDel.has(x.id)).concat(pendAdd.filter(x=>!(x.id in nte)));S.te[sid]=nte;save();renderTab()}
+async function staffFetchOwn(sid){if(!online())return;const {fs}=FB;const S=SYN();
+  try{const me_=me();
+    const [eq,tq]=await Promise.all([fs.getDocs(fs.query(fcol("sofs",sid,"events"),fs.where("by","==",me_))),fs.getDocs(fs.query(fcol("sofs",sid,"tally"),fs.where("by","==",me_)))]);
+    const s=sofById(sid);if(!s)return;
+    const syn=S.ev[sid]||(S.ev[sid]={});const loc={};s.events.forEach(e=>loc[e.id]=e);
+    eq.forEach(d=>{const r=d.data();if(!loc[d.id]&&syn[d.id]===undefined){s.events.push(Object.assign({},r,{id:d.id,photos:[]}));syn[d.id]=hsh(evPay(r))}else if(loc[d.id]&&syn[d.id]===undefined&&evHash(loc[d.id])===hsh(evPay(r)))syn[d.id]=hsh(evPay(r))});
+    const te=S.te[sid]||(S.te[sid]={});const docs=[];tq.forEach(d=>docs.push(d.data()));const remote=remoteTally(docs);
+    const localIds=new Set(s.tallyEntries.map(x=>x.id));
+    remote.forEach(x=>{if(!localIds.has(x.id)&&!(x.id in te)){s.tallyEntries.push(x)}te[x.id]=x.by});
+    save();renderTab()}catch(e){syncErr(e)}}
+
+/* ---- push (batched) ---- */
+function schedulePush(ms){if(!online())return;if(ms==null&&SY.pushT){updateSyncUI();return}clearTimeout(SY.pushT);SY.pushT=setTimeout(()=>{SY.pushT=null;pushNow()},ms==null?(isCap()?8000:15000):ms);updateSyncUI()}
+async function pushNow(){if(!online()||SY.pushing)return;if(isCap()&&!SYN().migrated)return;SY.pushing=true;const {fs}=FB;const S=SYN();const ops=[],revert=[];
+  try{
+    const mine=x=>isCap()||x.by===me();
+    if(isCap()){
+      const vids=new Set(R.vessels.map(v=>v.id));const vPend=R.vessels.some(v=>S.vh[v.id]!==hsh(vPay(v)))||Object.keys(S.vh).some(id=>!vids.has(id));
+      if(vPend){const data={list:R.vessels.map(vPay)};ops.push({t:"set",ref:fpath("state","vessels"),data});const old=Object.assign({},S.vh);revert.push(()=>S.vh=old);
+        S.vh={};R.vessels.forEach(v=>S.vh[v.id]=hsh(vPay(v)))}
+      R.sofs.forEach(s=>{const h=hsh(metaOf(s));if(S.sof[s.id]!==h){ops.push({t:"set",ref:fpath("sofs",s.id),data:metaOf(s)});const o=S.sof[s.id];revert.push(()=>S.sof[s.id]=o);S.sof[s.id]=h}});
+      const sids=new Set(R.sofs.map(s=>s.id));Object.keys(S.sof).forEach(id=>{if(!sids.has(id)){ops.push({t:"del",ref:fpath("sofs",id)});delete S.sof[id]}});
+    }
+    R.sofs.forEach(s=>{if(!isCap()&&!S.seen[s.id])return;
+      const syn=S.ev[s.id]||(S.ev[s.id]={});
+      s.events.forEach(e=>{if(!mine(e))return;if(isCap()&&!e.by)e.by="cap";const h=evHash(e);
+        if(syn[e.id]!==h){ops.push({t:"set",ref:fpath("sofs",s.id,"events",e.id),data:evPay(e)});const o=syn[e.id];revert.push(()=>syn[e.id]=o);syn[e.id]=h}});
+      const eids=new Set(s.events.map(e=>e.id));Object.keys(syn).forEach(id=>{if(!eids.has(id)){ops.push({t:"del",ref:fpath("sofs",s.id,"events",id)});delete syn[id]}});
+      const te=S.te[s.id]||(S.te[s.id]={});
+      const adds=s.tallyEntries.filter(x=>!(x.id in te)&&mine(x));const lids=new Set(s.tallyEntries.map(x=>x.id));
+      const dels=Object.keys(te).filter(id=>!lids.has(id)&&(isCap()||te[id]===me()));
+      const groups={};adds.forEach(x=>{const b=x.by||me();(groups[b]=groups[b]||[]).push(x)});
+      Object.keys(groups).forEach(b=>{const g=groups[b];for(let i=0;i<g.length;i+=400){const ch=g.slice(i,i+400);
+        ops.push({t:"set",ref:FB.fs.doc(fcol("sofs",s.id,"tally")),data:{by:b,at:Date.now(),add:ch.map(x=>clean({i:x.id,k:x.tallyId,h:x.holdId||null,q:+x.qty,t:x.t,b:x.by||me()})),del:[]}});
+        ch.forEach(x=>{te[x.id]=x.by||me();revert.push(()=>delete te[x.id])})}});
+      if(dels.length){ops.push({t:"set",ref:FB.fs.doc(fcol("sofs",s.id,"tally")),data:{by:me(),at:Date.now(),add:[],del:dels}});dels.forEach(id=>{const o=te[id];delete te[id];revert.push(()=>te[id]=o)})}
+    });
+    if(ops.length){save();SY.awaiting=true;updateSyncUI();
+      const commits=[];for(let i=0;i<ops.length;i+=450){const b=fs.writeBatch(FB.db);ops.slice(i,i+450).forEach(o=>{if(o.t==="set"){b.set(o.ref,clean(o.data));addBytes(o.data)}else b.delete(o.ref)});commits.push(b.commit())}
+      Promise.all(commits).then(()=>{SY.awaiting=false;SY.last=Date.now();SY.err="";updateSyncUI()}).catch(e=>{revert.forEach(f=>f());save();SY.awaiting=false;syncErr(e)});
+    }else{SY.last=SY.last||Date.now()}
+  }catch(e){revert.forEach(f=>f());syncErr(e)}
+  SY.pushing=false;updateSyncUI()}
+
+/* ---- network + status ---- */
+function applyNet(){if(!FB)return;try{SY.paused?FB.fs.disableNetwork(FB.db):FB.fs.enableNetwork(FB.db)}catch(e){}}
+function pendingCount(){if(!online())return 0;const S=SYN();let n=0;const mine=x=>isCap()||x.by===me();
+  R.sofs.forEach(s=>{if(!isCap()&&!S.seen[s.id])return;const te=S.te[s.id]||{},ev=S.ev[s.id]||{};
+    s.tallyEntries.forEach(x=>{if(mine(x)&&!(x.id in te))n++});s.events.forEach(e=>{if(mine(e)&&ev[e.id]!==evHash(e))n++})});return n}
+function syncText(){if(!online())return"";const n=pendingCount();
+  if(SY.err)return"⚠ "+SY.err;
+  if(SY.paused)return`⏸ Eşitleme duraklatıldı${n?` · ${n} kayıt bekliyor`:""}`;
+  if(!navigator.onLine)return`○ İnternet yok · ${n?n+" kayıt bekliyor, bağlantı gelince gider":"kayıtlar telefonda güvende"}`;
+  if(n||SY.awaiting)return`↻ Eşitleniyor${n?` · ${n} kayıt`:""}`;
+  return`✓ Eşitlendi${SY.last?" · "+fT(SY.last):""}`}
+function updateSyncUI(){const t=syncText();$$("[data-syncline]").forEach(e=>e.textContent=t);
+  const wb=$("#whoBtn");if(wb&&online()){wb.dataset.sync=SY.err?"err":(SY.paused||!navigator.onLine)?"off":(pendingCount()||SY.awaiting)?"busy":"ok"}}
+window.addEventListener("online",()=>{updateSyncUI();schedulePush(1500)});
+window.addEventListener("offline",updateSyncUI);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden"&&online())pushNow()});
+setInterval(()=>{if(online())updateSyncUI()},30000);
+
+/* ---- first online login of the captain: choose what to upload ---- */
+function migrateSheet(){const host=$("#sheetHost");
+  host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Aktarım"><h3>Kayıtları ortak sisteme aktar</h3>
+    <p class="note" style="margin:0">Bu telefondaki gemilerden hangileri internetli sisteme aktarılsın? İşaretlemedikleriniz bu telefondan silinir.</p>
+    <div class="pick">${R.vessels.map(v=>{const n=R.sofs.filter(s=>s.vesselId===v.id).length,ex=/örnek/i.test(v.name);
+      return `<label class="btn ghost" style="display:flex;gap:10px;align-items:center;justify-content:flex-start;min-height:48px"><input type="checkbox" data-mv="${v.id}"${ex?"":" checked"}> <b>${esc(v.name)}</b><span class="note" style="margin-left:auto">${n} SOF${ex?" · örnek":""}</span></label>`}).join("")}</div>
+    <div class="row" style="justify-content:flex-end"><button class="btn pri" id="mvGo">Aktar ve başla</button></div></div></div>`;
+  $("#mvGo").onclick=()=>{const keep=new Set([...host.querySelectorAll("[data-mv]")].filter(i=>i.checked).map(i=>i.dataset.mv));
+    R.vessels=R.vessels.filter(v=>keep.has(v.id));R.sofs=R.sofs.filter(s=>keep.has(s.vesselId));if(!cur())R.cur=null;
+    R.vessels.forEach(v=>{if(!v.activeSof){const l=R.sofs.filter(s=>s.vesselId===v.id).sort((a,b)=>b.created-a.created)[0];if(l)v.activeSof=l.id}});
+    R.example=false;SYN().migrated=true;save();host.innerHTML="";renderAll();toast("Aktarım başladı. İnternet varken birkaç saniye sürer.");pushNow()}}
+
+/* ---- staff accounts (created by the captain) ---- */
+async function createStaffAccount(v,m,user,pw){user=String(user||"").trim().toLowerCase();
+  if(!/^[a-z0-9._-]{3,30}$/.test(user))throw{code:"x",message:"Kullanıcı adı en az 3 karakter olmalı; sadece harf (Türkçe karaktersiz), rakam, nokta, tire."};
+  if(String(pw||"").length<6)throw{code:"auth/weak-password"};
+  const {a,au,fs}=FB;const sec=a.getApps().find(x=>x.name==="sec")||a.initializeApp(FBCONF,"sec");const sa=au.getAuth(sec);
+  try{await au.setPersistence(sa,au.inMemoryPersistence)}catch(e){}
+  const cr=await au.createUserWithEmailAndPassword(sa,toEmail(user),pw);
+  await fs.setDoc(fs.doc(FB.db,"users",cr.user.uid),{role:"staff",fleet:SES.fleet,memberId:m.id,vesselId:v.id,name:m.name,username:user});
+  try{await au.signOut(sa)}catch(e){}
+  if(m.uid&&m.uid!==cr.user.uid){try{await fs.deleteDoc(fs.doc(FB.db,"users",m.uid))}catch(e){}}
+  m.account=user;m.uid=cr.user.uid;save();schedulePush(500)}
+
+/* ---- online login screen ---- */
+let OLV="login";
+function renderOnlineLogin(){const L=$("#login");L.hidden=false;
+  const head=`<div class="logo"><img src="${LOGO}" alt="">DG SOF Defteri<small>${OLV==="signup"?"Kaptan hesabı oluştur":OLV==="reset"?"Şifre yenileme":"Giriş yapın"}</small></div>`;
+  let body="";
+  if(OLV==="signup")body=`<div class="lcard"><h3>Kaptan hesabı</h3>
+      <label class="field">Adınız<input id="cN" placeholder="Örn. Kpt. A. Yılmaz" autocomplete="name"></label>
+      <label class="field">E-posta (şifre unutulursa yenileme için)<input id="cE" type="email" autocomplete="email" placeholder="ornek@gmail.com"></label>
+      <label class="field">Şifre (en az 6)<input id="cP1" type="password" autocomplete="new-password"></label>
+      <label class="field">Şifre (tekrar)<input id="cP2" type="password" autocomplete="new-password"></label>
+      <p class="err" id="cErr" hidden></p><button class="btn pri" id="cGo">Hesabı oluştur</button>
+      <p class="note" style="margin:0">Bu telefondaki mevcut kayıtlarınızı bir sonraki adımda ortak sisteme aktarabilirsiniz. Personel hesaplarını siz açarsınız.</p>
+      <button class="lk" id="oBack">Girişe dön</button></div>`;
+  else if(OLV==="reset")body=`<div class="lcard"><h3>Kaptan şifresini yenile</h3>
+      <label class="field">Kaptan hesabının e-postası<input id="rE" type="email" autocomplete="email"></label>
+      <p class="err" id="rErr" hidden></p><button class="btn pri" id="rGo">Yenileme bağlantısı gönder</button>
+      <p class="note" style="margin:0">Personel şifresini unutursa kaptan, Üyeler bölümünden o kişiye yeni bir hesap açar.</p>
+      <button class="lk" id="oBack">Girişe dön</button></div>`;
+  else body=`<div class="lcard"><h3>Giriş</h3>
+      <label class="field">Kullanıcı adı (personel) veya e-posta (kaptan)<input id="oU" autocapitalize="none" autocomplete="username"></label>
+      <label class="field">Şifre<input id="oP" type="password" autocomplete="current-password"></label>
+      <p class="err" id="oErr" hidden></p><button class="btn pri" id="oGo" style="min-height:52px;font-size:16px">Giriş</button>
+      ${navigator.onLine?"":`<p class="note" style="margin:0">İnternet yok. Bu telefonda daha önce giriş yaptıysanız uygulama internetsiz açılır; ilk giriş için internet gerekir.</p>`}
+      <button class="lk" id="oSign">Kaptanım, hesap oluşturacağım</button><button class="lk" id="oReset">Kaptan şifremi unuttum</button></div>
+      <button class="lk" id="oLocal">İnternetsiz mod (QR ile, eski yöntem)</button>`;
+  L.innerHTML=`<div class="box">${head}${installCard()}${body}</div>`;wireInstall();
+  const err=(id,m)=>{const e=$(id);e.hidden=false;e.textContent=m};
+  if($("#oBack"))$("#oBack").onclick=()=>{OLV="login";renderOnlineLogin()};
+  if($("#oSign"))$("#oSign").onclick=()=>{OLV="signup";renderOnlineLogin()};
+  if($("#oReset"))$("#oReset").onclick=()=>{OLV="reset";renderOnlineLogin()};
+  if($("#oLocal"))$("#oLocal").onclick=()=>{LOGINMODE="local";renderLogin()};
+  if($("#oGo")){const go_=async()=>{const b=$("#oGo");b.disabled=true;b.textContent="Giriş yapılıyor…";
+      try{await FB.au.signInWithEmailAndPassword(FB.auth,toEmail($("#oU").value),$("#oP").value)}catch(e){err("#oErr",authMsg(e));b.disabled=false;b.textContent="Giriş"}};
+    $("#oGo").onclick=go_;$("#oP").onkeydown=e=>{if(e.key==="Enter")go_()}}
+  if($("#cGo"))$("#cGo").onclick=async()=>{const n=$("#cN").value.trim()||"Kaptan",em=$("#cE").value.trim(),p1=$("#cP1").value,p2=$("#cP2").value;
+    if(!em.includes("@"))return err("#cErr","Geçerli bir e-posta yazın");if(p1.length<6)return err("#cErr","Şifre en az 6 karakter olmalı");if(p1!==p2)return err("#cErr","Şifreler aynı değil");
+    const b=$("#cGo");b.disabled=true;b.textContent="Oluşturuluyor…";SIGNUP=true;
+    try{const cr=await FB.au.createUserWithEmailAndPassword(FB.auth,em,p1);
+      await FB.fs.setDoc(FB.fs.doc(FB.db,"users",cr.user.uid),{role:"cap",fleet:cr.user.uid,name:n,email:em});
+      SIGNUP=false;OLV="login";await onlineSignedIn(cr.user)}
+    catch(e){SIGNUP=false;err("#cErr",authMsg(e));b.disabled=false;b.textContent="Hesabı oluştur"}};
+  if($("#rGo"))$("#rGo").onclick=async()=>{try{await FB.au.sendPasswordResetEmail(FB.auth,$("#rE").value.trim());toast("Yenileme bağlantısı e-postanıza gönderildi");OLV="login";renderOnlineLogin()}catch(e){err("#rErr",authMsg(e))}};
+}
+
+/* ---- online account sheet ---- */
+function onlineAccountSheet(){const host=$("#sheetHost"),cap=isCap();
+  const kb=bytesSent/1024;
+  host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Hesap"><h3>${esc(mName(vesselOf(cur())||{members:[]},me()))}</h3>
+    <p class="note" style="margin:0">${cap?"Kaptan":"Personel"} · ${esc(SES.email||"")}</p>
+    <div class="banner" style="margin:0;flex-direction:column;align-items:flex-start;gap:6px"><b data-syncline>${esc(syncText())}</b>
+      <span class="note" style="margin:0">Bu telefondan gönderilen veri (yaklaşık): ${kb<1024?num(Math.round(kb))+" KB":num(Math.round(kb/102.4)/10)+" MB"}</span>
+      <div class="row"><button class="btn sm dark" id="aNow">Şimdi eşitle</button><label class="row" style="gap:6px;font-size:14px"><input type="checkbox" id="aPause"${SY.paused?" checked":""}> Eşitlemeyi duraklat</label></div></div>
+    <div class="lcard" style="box-shadow:none;padding:0"><h3 style="font-size:16px">Şifremi değiştir</h3>
+      <input type="password" id="aO" class="pwin" placeholder="Mevcut şifre" autocomplete="current-password"><input type="password" id="aN" class="pwin" placeholder="Yeni şifre (en az 6)" autocomplete="new-password">
+      <p class="err" id="aE" hidden></p><button class="btn ghost" id="aS" style="align-self:flex-start">Şifreyi değiştir</button></div>
+    ${cap?"":`<button class="btn ghost" id="aQR">İnternet yoksa: kayıtlarımı QR ile gönder</button>`}
+    <div class="row" style="justify-content:space-between"><button class="btn ghost" id="aC">Kapat</button><button class="btn danger" id="aOut">Çıkış yap</button></div></div></div>`;
+  $("#aC").onclick=()=>host.innerHTML="";
+  $("#aOut").onclick=async()=>{const n=pendingCount();if(n&&!$("#aOut").dataset.c){$("#aOut").dataset.c=1;$("#aOut").textContent=`${n} kayıt henüz gönderilmedi. Yine de çık`;return}onlineLogout()};
+  $("#aNow").onclick=()=>{SY.err="";if(SY.paused){SY.paused=false;try{localStorage.setItem("sof-paused","0")}catch(e){}applyNet();$("#aPause").checked=false}pushNow();if(isCap())stopActive();subscribeActive();updateSyncUI()};
+  $("#aPause").onchange=e=>{SY.paused=e.target.checked;try{localStorage.setItem("sof-paused",SY.paused?"1":"0")}catch(x){}applyNet();updateSyncUI()};
+  if(!cap)$("#aQR").onclick=()=>sendSheet();
+  $("#aS").onclick=async()=>{const e=$("#aE");try{const u=FB.auth.currentUser;
+      await FB.au.reauthenticateWithCredential(u,FB.au.EmailAuthProvider.credential(u.email,$("#aO").value));
+      if($("#aN").value.length<6)throw{code:"auth/weak-password"};await FB.au.updatePassword(u,$("#aN").value);host.innerHTML="";toast("Şifre değiştirildi")}
+    catch(x){e.hidden=false;e.textContent=authMsg(x)}}}
+
 /* ---------- account ---------- */
-function accountSheet(){const host=$("#sheetHost");const cap=isCap();
+function accountSheet(){if(online())return onlineAccountSheet();const host=$("#sheetHost");const cap=isCap();
   host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Hesap"><h3>${esc(mName(vesselOf(cur())||{members:[]},me()))}</h3>
     <p class="note" style="margin:0">${cap?"Kaptan · tüm bölümlere erişim":"Personel · Olay Bas, Kayıt ve Tally"}</p>
     ${cap?`<div class="lcard" style="box-shadow:none;padding:0"><h3 style="font-size:16px">Kaptan şifresini değiştir</h3>
@@ -1247,7 +1532,8 @@ function wireInstall(){const b=$("#instBtn");if(b)b.onclick=async()=>{if(!deferr
 
 /* ---------- login screen ---------- */
 let LV="login",REC=null,FIRST=null;
-function renderLogin(){const L=$("#login");L.hidden=false;
+function renderLogin(){if(FB&&LOGINMODE!=="local")return renderOnlineLogin();return renderLocalLogin()}
+function renderLocalLogin(){const L=$("#login");L.hidden=false;
   const head=`<div class="logo"><img src="${LOGO}" alt="">DG SOF Defteri<small>${R.auth?"Giriş yapın":"İlk kurulum"}</small></div>`;
   const loadCard=open=>`<details class="lcard"${open?" open":""}><summary style="cursor:pointer;font-weight:600">Kaptandan gelen kodu yükle</summary>
     <p class="note" style="margin:0">Personel telefonu için: kaptanın gönderdiği paketi yapıştırın veya dosyayı seçin.</p>
@@ -1282,7 +1568,8 @@ function renderLogin(){const L=$("#login");L.hidden=false;
       <p class="err" id="lE" hidden></p><button class="btn pri" id="lGo">Giriş</button>
       ${users.length===1?`<p class="note" style="margin:0">Personel listede yoksa: kaptan “Gemiler → Üyeler”den şifre belirlemeli ve bu telefona paket yüklemeli.</p>`:""}
       <button class="lk" id="lForgot">Kaptan şifremi unuttum</button></div>${scanCard}${loadCard(false)}`}
-  L.innerHTML=`<div class="box">${head}${installCard()}${body}</div>`;wireInstall();
+  L.innerHTML=`<div class="box">${head}${installCard()}${body}${FB?`<button class="lk" id="toOnline">İnternetli girişe dön</button>`:""}</div>`;wireInstall();
+  if($("#toOnline"))$("#toOnline").onclick=()=>{LOGINMODE="online";renderLogin()};
   // wire
   const lin=$("#lLoad");if(lin){
     $("#lF").onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$("#lIn").value=r.result;$("#lLoad").click()};r.readAsText(f);ev.target.value=""};
@@ -1318,7 +1605,10 @@ function renderTab(){({fleet:renderFleet,ev:renderTaps,log:renderLog,tally:rende
 function renderAll(){renderHeader();renderTab()}
 
 /* ---------- boot ---------- */
-openDB().then(load).then(d=>{const m=migrate(d);R=m||sample();if(!m)save();SES=loadSes();if(SES)enterApp();else renderLogin()});
+openDB().then(load).then(async d=>{const m=migrate(d);R=m||sample();if(!m)save();
+  const ok=!inFrame&&await fbWait(6000);
+  if(ok){try{fbInit();FB.au.onAuthStateChanged(FB.auth,u=>authChanged(u));return}catch(e){FB=null}}
+  SES=loadSes();if(SES)enterApp();else renderLogin()});
 })();
 </script>
 

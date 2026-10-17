@@ -1,12 +1,14 @@
 // DG SOF Defteri – çevrimdışı önbellek. Uygulamayı güncellediğinizde VERSION değerini artırın.
-const VERSION = "dg-sof-v10";
+const VERSION = "dg-sof-v11";
+const FBV = "https://www.gstatic.com/firebasejs/10.12.2/";
+const FBJS = ["firebase-app.js", "firebase-auth.js", "firebase-firestore.js"].map(f => FBV + f);
 const JSQR = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"; // yedek QR okuyucu (iPhone için)
 const CORE = ["./", "index.html", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-192.png", "icons/maskable-512.png",
   "icons/apple-touch-icon.png", "icons/favicon-48.png"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE).then(() => c.add(new Request(JSQR, {mode: "no-cors"})).catch(() => {}))).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE).then(() => Promise.all([c.add(new Request(JSQR, {mode: "no-cors"})).catch(() => {}), ...FBJS.map(u => c.add(u).catch(() => {}))]))).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
@@ -26,6 +28,10 @@ self.addEventListener("fetch", e => {
     return;
   }
   if (req.url === JSQR) { e.respondWith(caches.match(req, {ignoreVary: true}).then(hit => hit || fetch(req))); return; }
+  if (url.hostname === "www.gstatic.com" && url.pathname.startsWith("/firebasejs/")) {
+    e.respondWith(caches.open(VERSION).then(async c => (await c.match(req)) || fetch(req).then(r => { if (r.ok) c.put(req, r.clone()); return r; })));
+    return;
+  }
   if (url.origin !== location.origin) return;
   // App pages: network first (gets updates), fall back to cache offline
   if (req.mode === "navigate") {
