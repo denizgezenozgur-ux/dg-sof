@@ -198,7 +198,10 @@ header.top .brand{cursor:pointer}
 .vhead small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
 .vhead .row{margin-left:auto}
 .sofs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border-top:1px solid var(--line)}
-.sofs li{border-bottom:1px solid var(--line)}
+.sofs li{border-bottom:1px solid var(--line);display:flex;align-items:center;gap:4px}
+.sofs li .open{flex:1;min-width:0}
+.sofs .del{border:0;background:transparent;color:var(--muted);padding:10px 8px;font-size:13px;border-radius:8px;min-height:44px}
+.sofs .del:hover{color:var(--bad)}
 .sofs button.open{width:100%;border:0;background:transparent;text-align:left;display:grid;grid-template-columns:92px 1fr auto;gap:10px;padding:10px 2px;align-items:center}
 .sofs .d{font-family:var(--f-mono);font-size:12.5px;line-height:1.3;font-variant-numeric:tabular-nums}
 .sofs .d small{display:block;color:var(--muted)}
@@ -566,7 +569,7 @@ function renderFleet(){
       ${shown.length?`<ul class="sofs">${shown.map(x=>{const [a,b]=span(x),t=totals(x);return `<li class="${x.id===R.cur?"act":""}"><button class="open" data-sof="${x.id}">
         <div class="d">${fD(a)}<small>${fD(b)===fD(a)?fDay(a):"→ "+fD(b)}</small></div>
         <div class="i"><b>${esc(sofTitle(x))}${x.id===R.cur?'<span class="badge">Aktif</span>':""}</b><span>${esc([x.voyage.cargo,x.voyage.op==="Discharging"?"Tahliye":"Yükleme",x.voyage.voyNo].filter(Boolean).join(" · "))} · ${x.events.length} olay</span></div>
-        <div class="q">${num(t.d)}<br><span style="color:var(--muted)">/ ${num(t.p)} MT</span></div></button></li>`}).join("")}</ul>`:`<p class="note" style="margin:0">Bu gemi için henüz SOF yok.</p>`}
+        <div class="q">${num(t.d)}<br><span style="color:var(--muted)">/ ${num(t.p)} MT</span></div></button><button class="del" data-delsof="${x.id}" aria-label="SOF’u sil" title="SOF’u sil">Sil</button></li>`}).join("")}</ul>`:`<p class="note" style="margin:0">Bu gemi için henüz SOF yok.</p>`}
     </div>`}).join("")||"";
   if(Q&&!any)$("#vesselList").innerHTML=`<p class="empty">“${esc(Q)}” için kayıt bulunamadı.</p>`;
   $$(".vcard").forEach(el=>{const v=R.vessels.find(x=>x.id===el.dataset.v);
@@ -574,10 +577,24 @@ function renderFleet(){
     el.querySelector("[data-mem]").onclick=()=>membersSheet(v.id);
     el.querySelector("[data-newsof]").onclick=()=>sofSheet(v.id);
     el.querySelectorAll("[data-sof]").forEach(b=>b.onclick=()=>{R.cur=b.dataset.sof;save();renderHeader();toast("SOF açıldı");go("ev")});
+    el.querySelectorAll("[data-delsof]").forEach(b=>b.onclick=()=>delSofSheet(b.dataset.delsof));
   });
 }
 $("#addVessel").onclick=()=>vesselSheet(null);
 $("#clearEx").onclick=()=>{R=Object.assign(blankRoot(),{auth:R.auth});save();renderAll()};
+
+/* delete one SOF after an explicit confirmation */
+function delSofSheet(id){const x=R.sofs.find(s=>s.id===id);if(!x)return;const host=$("#sheetHost"),[a,b]=span(x);
+  const nph=x.events.reduce((n,e)=>n+e.photos.length,0),t=totals(x),tq=x.tallyEntries.reduce((n,e)=>n+(+e.qty||0),0);
+  host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="SOF sil"><h3>SOF silinsin mi?</h3>
+    <div class="banner" style="margin:0;flex-direction:column;align-items:flex-start;gap:4px"><b>${esc(vesselOf(x).name)} · ${esc(sofTitle(x))}</b>
+      <span>${fD(a)}${fD(b)!==fD(a)?" – "+fD(b):""}${x.id===R.cur?" · <b>aktif SOF</b>":""}</span>
+      <span>${x.events.length} olay · ${num(t.d)} MT ambar kaydı · ${num(tq)} adet tally${nph?` · ${nph} fotoğraf`:""}</span></div>
+    <p class="note" style="margin:0">Bu SOF ve içindeki tüm kayıtlar bu telefondan <b>kalıcı olarak</b> silinir. Geri alınamaz. Saklamak istiyorsanız önce Rapor sekmesinden çıktı veya yedek alın.</p>
+    <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="dsC">Vazgeç</button><button class="btn danger" id="dsY">Kalıcı olarak sil</button></div></div></div>`;
+  $("#dsC").onclick=()=>host.innerHTML="";
+  host.querySelector(".sheet-bg").onclick=e=>{if(e.target.classList.contains("sheet-bg"))host.innerHTML=""};
+  $("#dsY").onclick=()=>{R.sofs=R.sofs.filter(s=>s.id!==id);if(R.cur===id)R.cur=null;save();host.innerHTML="";renderAll();toast(`${esc(sofTitle(x))} silindi`)}}
 
 /* vessel sheet: name + hold template */
 function vesselSheet(id){
