@@ -1,0 +1,19 @@
+{
+  "name": "DG SOF Defteri",
+  "short_name": "DG SOF",
+  "description": "Gemi SOF defteri: olay saatleri, tally sayımı, ambar takibi ve Statement of Facts çıktısı.",
+  "lang": "tr",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0A5731",
+  "theme_color": "#0A5731",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+    {"src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

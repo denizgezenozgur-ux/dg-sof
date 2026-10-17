@@ -1,0 +1,43 @@
+DG SOF DEFTERİ – KURULUM
+========================
+
+Uygulamanın ikonla kurulabilmesi için bu klasörün bir kez internette (https) yayınlanması gerekir.
+Kurulduktan sonra telefon ve bilgisayarda İNTERNETSİZ çalışır. Kayıtlar her cihazın kendi içinde kalır,
+hiçbir sunucuya gönderilmez.
+
+1) YAYINLAMA (bir kez, ücretsiz) – en kolayı Netlify Drop:
+   - Bilgisayardan https://app.netlify.com/drop adresine girin (ücretsiz hesap açın).
+   - Bu ZIP'i açın ve içindeki "dg-sof" klasörünü sayfaya sürükleyip bırakın.
+   - Size https://....netlify.app şeklinde bir adres verir. Site ayarlarından adı değiştirebilirsiniz
+     (örn. dg-sof.netlify.app).
+   Alternatif: GitHub Pages (klasörü bir depoya yükleyip Pages'i açın).
+
+2) TELEFONA KURMA
+   Android (Chrome): adresi açın → giriş ekranındaki "Kur" düğmesine basın
+                     (veya menü ⋮ → "Uygulamayı yükle / Ana ekrana ekle").
+   iPhone (Safari):  adresi açın → alttaki Paylaş (□↑) → "Ana Ekrana Ekle".
+
+3) BİLGİSAYARA KURMA
+   Chrome veya Edge ile adresi açın → adres çubuğundaki "Yükle" ikonuna (⊕ / monitör) basın.
+   Başlat menüsünde / masaüstünde DG ikonuyla açılır.
+
+4) PERSONEL
+   Personele sadece adresi gönderin. Bir kez açıp kurarlar, sonra internetsiz çalışır.
+   Giriş ekranında "Kaptandan gelen kodu yükle" ile sizin paketinizi yükler, kendi şifreleriyle girerler.
+   "Sayımlarımı gönder" → "Paylaş" ile sayımlarını doğrudan WhatsApp'tan size yollarlar.
+
+İNTERNETSİZ VERİ AKTARIMI (WhatsApp gerekmez)
+   QR KOD (en kolay, her telefonda):
+   - Kaptan → personel: Kaptan telefonunda Rapor → "Personel paketi hazırla" → "QR göster".
+     Personel giriş ekranında "QR okut"a basar, kamerayı ekrana tutar. Kodlar sırayla değişir,
+     telefon hepsini toplayınca paket yüklenir.
+   - Personel → kaptan: Personel "Sayımlarımı gönder" → "QR göster".
+     Kaptan Rapor → "Personel sayımını al" → "QR okut".
+   - Her gönderim personelin TÜM sayımlarını içerir; en son okutulan geçerli olur, sayılar ikiye katlanmaz.
+   BLUETOOTH / QUICK SHARE / AIRDROP:
+   - "Paylaş" düğmesi telefonun paylaşım menüsünü açar. Quick Share (Android) ve AirDrop (iPhone)
+     internetsiz çalışır. Gelen dosyayı kaptan "Personel sayımını al" → "Dosya seç" ile yükler.
+
+GÜNCELLEME
+   Yeni sürüm gelirse dosyaları aynı siteye tekrar yükleyin ve sw.js içindeki VERSION değerini artırın.
+   Cihazlar internete bağlandıklarında yeni sürümü alır; kayıtlar silinmez.

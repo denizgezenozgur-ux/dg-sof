@@ -1,0 +1,1206 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A5731">
+<meta name="description" content="Gemi SOF defteri: olay saatleri, tally sayımı, ambar takibi ve Statement of Facts çıktısı.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon-48.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DG SOF">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>DG SOF Defteri</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: bridge-logbook tool — sticky vessel strip, four tabs, fixed bottom nav; report prints as a clean SOF sheet */
+:root{
+  --bg:#EEF2F3; --surface:#FFFFFF; --ink:#0E2232; --muted:#5B6E7C; --line:#D3DCE1;
+  --accent:#F2B705; --accent-ink:#1A1400; --navy:#0E2A44; --navy-ink:#F4F7F9;
+  --ok:#1E7F4F; --warn:#B4540A; --bad:#B3261E; --chip:#E3EAEE;
+  --f-display:"Saira Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0A1620; --surface:#12222F; --ink:#E6EEF2; --muted:#93A6B3; --line:#24384A;
+  --accent:#F5C21C; --accent-ink:#1A1400; --navy:#06111A; --navy-ink:#E6EEF2;
+  --ok:#4CC38A; --warn:#F0A04B; --bad:#F2867E; --chip:#1B3042; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0A1620; --surface:#12222F; --ink:#E6EEF2; --muted:#93A6B3; --line:#24384A;
+  --accent:#F5C21C; --accent-ink:#1A1400; --navy:#06111A; --navy-ink:#E6EEF2;
+  --ok:#4CC38A; --warn:#F0A04B; --bad:#F2867E; --chip:#1B3042; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;margin:0;padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--navy)}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:860px;margin:0 auto}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
+/* header */
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--navy);color:var(--navy-ink)}
+header.top .wrap{display:flex;align-items:center;gap:12px;padding-block:10px}
+.brand{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:.04em;text-transform:uppercase;line-height:1}
+.brand small{display:block;font-family:var(--f-body);font-weight:500;font-size:12px;letter-spacing:.02em;text-transform:none;opacity:.75;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:56vw}
+.clock{margin-left:auto;text-align:right;line-height:1.1}
+.clock b{font-family:var(--f-mono);font-size:22px;font-weight:600;display:block}
+.clock span{font-size:11.5px;opacity:.75}
+
+main section{display:none;padding-block:16px 8px}
+main section.on{display:block}
+h2{font-family:var(--f-display);font-weight:700;font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:18px 0 8px}
+h2:first-child{margin-top:4px}
+
+.banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--chip);border:1px dashed var(--muted);border-radius:8px;padding:10px 12px;font-size:13.5px;margin-bottom:12px}
+.banner button{margin-left:auto}
+
+/* one-tap grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.tap{position:relative;border:0;border-radius:10px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);padding:14px 12px 12px;text-align:left;min-height:68px;display:flex;flex-direction:column;justify-content:space-between;gap:6px;transition:transform .08s}
+.tap:active{transform:scale(.97)}
+.tap b{font-weight:600;font-size:14.5px;line-height:1.2}
+.tap i{font-style:normal;font-family:var(--f-mono);font-size:11.5px;color:var(--muted)}
+.tap.done{box-shadow:inset 0 0 0 2px var(--accent)}
+.tap.done i{color:var(--ink)}
+.tap.key{background:var(--accent);color:var(--accent-ink);box-shadow:none}
+.tap.key i{color:var(--accent-ink);opacity:.8}
+.tap.custom{border:1.5px dashed var(--muted);box-shadow:none;background:transparent;align-items:center;justify-content:center;text-align:center}
+
+/* log list */
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.log li{display:grid;grid-template-columns:78px 1fr auto;gap:10px;align-items:start;padding:11px 0;border-bottom:1px solid var(--line)}
+.log .t{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:13px;line-height:1.25}
+.log .t small{display:block;color:var(--muted);font-size:11px}
+.log .e{min-width:0}
+.log .e b{font-weight:600}
+.log .e p{margin:2px 0 0;color:var(--muted);font-size:13.5px;overflow-wrap:anywhere}
+.log .thumbs{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.log .thumbs img{width:48px;height:48px;object-fit:cover;border-radius:6px}
+.daysep{list-style:none;font-family:var(--f-display);font-weight:600;letter-spacing:.1em;text-transform:uppercase;font-size:13px;color:var(--muted);padding:14px 0 4px;border-bottom:1px solid var(--line)}
+.empty{color:var(--muted);padding:20px 0;text-align:center;font-size:14px}
+
+.btn{border:0;border-radius:8px;padding:10px 14px;font-weight:600;background:var(--chip);min-height:42px}
+.btn.pri{background:var(--accent);color:var(--accent-ink)}
+.btn.dark{background:var(--navy);color:var(--navy-ink)}
+.btn.ghost{background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
+.btn.danger{background:transparent;color:var(--bad);box-shadow:inset 0 0 0 1px var(--bad)}
+.btn.sm{padding:6px 10px;min-height:34px;font-size:13.5px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* holds */
+.sum{background:var(--navy);color:var(--navy-ink);border-radius:12px;padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.sum div{min-width:0}
+.sum span{display:block;font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.7}
+.sum b{font-family:var(--f-mono);font-size:clamp(18px,5vw,26px);font-weight:600;font-variant-numeric:tabular-nums}
+.sum .bar{grid-column:1/-1;height:10px;border-radius:5px;background:rgba(255,255,255,.15);overflow:hidden;margin-top:6px}
+.sum .bar i{display:block;height:100%;background:var(--accent)}
+.sum .pct{grid-column:1/-1;font-size:13px;opacity:.85}
+.holds{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:12px}
+.hold{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.hold header{display:flex;align-items:center;gap:8px}
+.hold header input{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:.04em;border:0;background:transparent;width:100%;padding:0;min-width:0}
+.hstats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:12px;color:var(--muted)}
+.hstats b{display:block;font-family:var(--f-mono);font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums}
+.hbar{height:8px;border-radius:4px;background:var(--chip);overflow:hidden}
+.hbar i{display:block;height:100%;background:var(--ok)}
+.hbar.over i{background:var(--warn)}
+.field{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted);min-width:0}
+.field input,.field select,.field textarea{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px;color:var(--ink);width:100%;min-width:0}
+.addq{display:grid;grid-template-columns:1fr auto;gap:6px}
+.entries{font-size:13px;border-top:1px solid var(--line);padding-top:6px}
+.entries summary{cursor:pointer;color:var(--muted)}
+.entries ul{list-style:none;margin:6px 0 0;padding:0}
+.entries li{display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px dotted var(--line)}
+.entries li .mono{font-size:12.5px}
+.entries li b{margin-left:auto;font-family:var(--f-mono)}
+.x{border:0;background:transparent;color:var(--muted);font-size:18px;line-height:1;padding:4px 6px}
+
+/* voyage form */
+.form{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+
+/* sheet */
+.sheet-bg{position:fixed;inset:0;background:rgba(5,15,25,.55);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:620px;border-radius:16px 16px 0 0;max-height:92vh;overflow:auto;padding-block:16px calc(16px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:12px}
+.sheet h3{font-family:var(--f-display);font-size:22px;margin:0;letter-spacing:.02em}
+.phgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px}
+.ph{position:relative;aspect-ratio:1;max-width:100%}
+.ph img{width:100%;height:100%;object-fit:cover;border-radius:8px}
+.ph button{position:absolute;top:4px;right:4px;border:0;border-radius:50%;width:26px;height:26px;background:rgba(0,0,0,.65);color:#fff;font-size:15px;line-height:1}
+.addph{border:1.5px dashed var(--muted);border-radius:8px;aspect-ratio:1;display:flex;align-items:center;justify-content:center;text-align:center;font-size:13px;color:var(--muted);cursor:pointer;padding:6px}
+.addph input{display:none}
+
+/* toast */
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:35;background:var(--ink);color:var(--bg);border-radius:10px;padding:10px 12px;display:flex;gap:10px;align-items:center;max-width:calc(100% - 32px);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:14px}
+.toast b{font-family:var(--f-mono)}
+.toast button{border:0;background:transparent;color:var(--accent);font-weight:600;padding:6px 4px;white-space:nowrap}
+:root:not([data-theme="dark"]) .toast button{color:#FFD24A}
+
+/* nav */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+nav.tabs .in{display:grid;grid-template-columns:repeat(4,1fr);max-width:860px;margin:0 auto}
+nav.tabs button{border:0;background:transparent;padding:10px 4px 12px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;font-weight:500;color:var(--muted);min-height:62px}
+nav.tabs button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8}
+nav.tabs button.on{color:var(--ink)}
+nav.tabs button.on svg{stroke:var(--ink)}
+nav.tabs button.on span{box-shadow:0 2px 0 var(--accent)}
+
+/* report */
+.rep{background:#fff;color:#111;border-radius:6px;padding:20px;box-shadow:inset 0 0 0 1px var(--line);overflow-x:auto;font-size:12.5px}
+.rep h1{font-family:var(--f-display);font-size:24px;letter-spacing:.06em;margin:0 0 2px;text-transform:uppercase;color:#111}
+.rep .sub{color:#555;margin-bottom:12px}
+.rep table{border-collapse:collapse;width:100%;min-width:520px;margin-bottom:14px}
+.rep th,.rep td{border:1px solid #999;padding:5px 7px;text-align:left;vertical-align:top}
+.rep th{background:#e9ecee;font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em}
+.rep td.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.rep td.m{font-family:var(--f-mono);white-space:nowrap}
+.rep .kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border:1px solid #999;margin-bottom:14px}
+.rep .kv div{padding:5px 7px;border-bottom:1px solid #ccc}
+.rep .kv span{color:#555;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;display:block}
+.rep h4{font-family:var(--f-display);font-size:15px;letter-spacing:.1em;text-transform:uppercase;margin:16px 0 6px;color:#111}
+.rep .photos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.rep .photos figure{margin:0;break-inside:avoid}
+.rep .photos img{width:100%;aspect-ratio:4/3;object-fit:cover;border:1px solid #999}
+.rep .photos figcaption{font-size:10.5px;color:#333}
+.rep .sign{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:28px}
+.rep .sign div{border-top:1px solid #333;padding-top:4px;font-size:11px;text-align:center}
+.note{font-size:13px;color:var(--muted);margin:8px 0}
+textarea.copybox{width:100%;height:160px;font-family:var(--f-mono);font-size:12px;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px}
+
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+
+@media print{
+  @page{size:A4;margin:12mm}
+  body{background:#fff;padding:0}
+  body::before,header.top,nav.tabs,.toast,.noprint,main section:not(#tab-rep){display:none!important}
+  main section#tab-rep{display:block!important;padding:0}
+  .wrap{padding:0;max-width:none}
+  .rep{box-shadow:none;padding:0;overflow:visible}
+  .rep table{min-width:0}
+  .rep tr{break-inside:avoid}
+}
+</style>
+<style>
+/* additions: fleet archive */
+nav.tabs .in{grid-template-columns:repeat(5,1fr)}
+nav.tabs button{font-size:11.5px}
+header.top .brand{cursor:pointer}
+.vcard{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+.vhead{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.vhead h3{font-family:var(--f-display);font-weight:700;font-size:24px;letter-spacing:.04em;margin:0;line-height:1.05;text-transform:uppercase}
+.vhead small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.vhead .row{margin-left:auto}
+.sofs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.sofs li{border-bottom:1px solid var(--line)}
+.sofs button.open{width:100%;border:0;background:transparent;text-align:left;display:grid;grid-template-columns:92px 1fr auto;gap:10px;padding:10px 2px;align-items:center}
+.sofs .d{font-family:var(--f-mono);font-size:12.5px;line-height:1.3;font-variant-numeric:tabular-nums}
+.sofs .d small{display:block;color:var(--muted)}
+.sofs .i{min-width:0}
+.sofs .i b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sofs .i span{font-size:12.5px;color:var(--muted)}
+.sofs .q{font-family:var(--f-mono);font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums}
+.badge{display:inline-block;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:var(--accent);color:var(--accent-ink);vertical-align:2px;margin-left:6px}
+.sofs li.act{background:var(--chip)}
+.active-card{background:var(--navy);color:var(--navy-ink);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.active-card div{min-width:0;flex:1}
+.active-card span{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.7}
+.active-card b{display:block;font-family:var(--f-display);font-size:22px;letter-spacing:.04em;text-transform:uppercase}
+.active-card p{margin:0;font-size:13px;opacity:.85}
+.hrows{display:flex;flex-direction:column;gap:6px}
+.hrows .hr{display:grid;grid-template-columns:1fr 110px auto;gap:6px;align-items:center}
+.hrows input{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:15px;width:100%;min-width:0}
+.gate{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);border-radius:12px;padding:24px 16px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
+.entries li input[type=datetime-local]{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:3px 5px;font-size:12px;font-family:var(--f-mono);min-width:0;max-width:170px}
+nav.tabs .in{grid-template-columns:repeat(6,1fr)}
+nav.tabs button{font-size:11px;padding-inline:2px}
+.who{border:0;border-radius:999px;background:rgba(255,255,255,.12);color:var(--navy-ink);padding:6px 12px;font-size:13px;font-weight:600;white-space:nowrap;max-width:34vw;overflow:hidden;text-overflow:ellipsis;min-height:34px}
+.who{margin-left:auto}
+.who:not([hidden])+.clock{margin-left:0}
+.who.none{background:var(--accent);color:var(--accent-ink)}
+.tbar{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px}
+.tbar button{border:0;border-radius:999px;padding:7px 12px;background:var(--chip);font-size:13.5px;font-weight:500;white-space:nowrap;min-height:36px}
+.tbar button.on{background:var(--navy);color:var(--navy-ink)}
+.tallies{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.tcard{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.tcard header{display:flex;align-items:baseline;gap:8px}
+.tcard header b{font-family:var(--f-display);font-size:20px;letter-spacing:.04em;text-transform:uppercase;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tcount{font-family:var(--f-mono);font-size:44px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.tcount small{font-size:13px;color:var(--muted);font-family:var(--f-body);font-weight:500;margin-left:6px}
+.tplus{border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);font-family:var(--f-display);font-weight:700;font-size:30px;min-height:72px;width:100%;transition:transform .08s}
+.tplus:active{transform:scale(.97)}
+.tline{display:grid;grid-template-columns:auto 1fr auto;gap:6px}
+.tline input{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px;min-width:0;width:100%}
+.byuser{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 10px}
+.byuser b{color:var(--ink);font-family:var(--f-mono)}
+.mstat{width:100%;border-collapse:collapse;font-size:13.5px}
+.mstat th,.mstat td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}
+.mstat th{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.mstat td.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.tw{overflow-x:auto}
+.pick{display:flex;flex-direction:column;gap:6px}
+.pick button{border:0;border-radius:10px;background:var(--chip);padding:12px 14px;text-align:left;font-size:15px;display:flex;justify-content:space-between;gap:10px;min-height:48px}
+.pick button.on{background:var(--navy);color:var(--navy-ink)}
+.pick button span{opacity:.7;font-size:13px}
+.login{position:fixed;inset:0;z-index:50;background:var(--bg);overflow:auto;padding-block:calc(28px + env(safe-area-inset-top,0px)) calc(28px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.login .box{max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.login .logo{font-family:var(--f-display);font-weight:700;font-size:40px;letter-spacing:.05em;text-transform:uppercase;line-height:1;color:var(--ink)}
+.login .logo small{display:block;font-family:var(--f-body);font-size:14px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--muted);margin-top:6px}
+.lcard{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.lcard h3{font-family:var(--f-display);font-size:20px;letter-spacing:.03em;margin:0}
+.err{color:var(--bad);font-size:13.5px;margin:0}
+.rcode{font-family:var(--f-mono);font-size:24px;font-weight:600;letter-spacing:.08em;text-align:center;background:var(--chip);border-radius:8px;padding:14px 8px;user-select:all}
+.pwin{border:1px dashed var(--line);background:var(--bg);border-radius:8px;padding:7px 10px;font-size:14px;width:100%;margin-bottom:6px}
+.lk{border:0;background:transparent;color:var(--muted);text-decoration:underline;font-size:13.5px;padding:6px 0;align-self:center}
+.brandwrap{display:flex;align-items:center;gap:10px;min-width:0;flex:1;overflow:hidden}
+.brandwrap .brand{min-width:0;font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brandwrap .brand small{max-width:none}
+.who{flex:none;max-width:30vw!important}
+.clock b{font-size:19px!important}
+.brandwrap img{width:36px;height:36px;border-radius:9px;flex:none}
+.login .logo img{width:84px;height:84px;border-radius:20px;display:block;margin-bottom:12px;box-shadow:0 6px 20px rgba(4,44,100,.3)}
+.install{display:flex;gap:10px;align-items:center;background:var(--navy);color:var(--navy-ink);border-radius:12px;padding:12px 14px;font-size:14px}
+.install img{width:40px;height:40px;border-radius:10px;flex:none}
+.install div{flex:1;min-width:0}
+.search{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 12px;font-size:15px;margin-bottom:12px}
+</style>
+
+
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brandwrap"><img src="data:image/png;base64,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" alt=""><div class="brand" id="brand" role="button" tabindex="0" title="Gemi / SOF değiştir">SOF Defteri<small id="hdrVessel">—</small></div></div>
+    <button class="who" id="whoBtn" hidden></button>
+    <div class="clock"><b id="clk">--:--</b><span id="clkd"></span></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- TALLY -->
+  <section id="tab-tally"><div id="tallyWrap"></div></section>
+  <!-- FLEET -->
+  <section id="tab-fleet">
+    <div id="exBanner" class="banner" hidden>Bunlar örnek kayıtlar. Kendi gemilerinizi eklemeden önce temizleyebilirsiniz.
+      <button class="btn sm dark" id="clearEx">Örnekleri temizle</button></div>
+    <div id="activeCard"></div>
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <h2 style="margin:0">Gemiler</h2>
+      <button class="btn pri" id="addVessel">+ Yeni gemi</button>
+    </div>
+    <input class="search" id="q" type="search" placeholder="Gemi, liman, yük veya tarih ara (örn. Cemile, 03.2026)">
+    <div id="vesselList"></div>
+  </section>
+
+  <!-- EVENTS -->
+  <section id="tab-ev">
+    <div id="tapGroups"></div>
+  </section>
+
+  <!-- LOG -->
+  <section id="tab-log">
+    <div id="logWrap"></div>
+  </section>
+
+  <!-- HOLDS -->
+  <section id="tab-hold">
+    <div id="holdWrap"></div>
+  </section>
+
+  <!-- REPORT -->
+  <section id="tab-rep">
+    <div id="repWrap"></div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <div class="in">
+    <button data-tab="fleet"><svg viewBox="0 0 24 24"><path d="M3 15h18l-3 5H6z"/><path d="M6 15V9h12v6M12 9V4"/></svg><span>Gemiler</span></button>
+    <button data-tab="ev"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>Olay Bas</span></button>
+    <button data-tab="log"><svg viewBox="0 0 24 24"><path d="M5 5h14M5 10h14M5 15h9M5 20h6"/></svg><span>Kayıt</span></button>
+    <button data-tab="tally"><svg viewBox="0 0 24 24"><path d="M5 5v14M9 5v14M13 5v14M17 5v14M3 17L19 7"/></svg><span>Tally</span></button>
+    <button data-tab="hold"><svg viewBox="0 0 24 24"><path d="M3 9h18l-2 10H5L3 9z"/><path d="M8 9V5h8v4"/></svg><span>Ambarlar</span></button>
+    <button data-tab="rep"><svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></svg><span>Rapor</span></button>
+  </div>
+</nav>
+
+<div class="login" id="login"><div class="box"><div class="logo">DG SOF Defteri<small>Yükleniyor…</small></div></div></div>
+<div id="sheetHost"></div>
+<div id="toastHost"></div>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const $$=s=>document.querySelectorAll(s);
+const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const inFrame=(()=>{try{return window.self!==window.top}catch(e){return true}})();
+
+/* ---------- event catalogue ---------- */
+const GROUPS=[
+ {name:"Varış",items:["EOSP (End of Sea Passage)","Anchored","NOR Tendered","Anchor Aweigh","Pilot On Board (In)","First Line Ashore","All Fast","Gangway Down","Free Pratique Granted","NOR Accepted"],key:["All Fast","NOR Tendered"]},
+ {name:"Survey / Kontrol",items:["Hold Inspection Started","Holds Passed","Initial Draft Survey Started","Initial Draft Survey Completed","Final Draft Survey Started","Final Draft Survey Completed","Ullage / Sounding Survey"],key:[]},
+ {name:"Operasyon",items:["Commenced Loading","Commenced Discharging","Stopped","Resumed","Shifting Between Holds","Trimming Started","Completed Loading","Completed Discharging"],key:["Commenced Loading","Completed Loading"]},
+ {name:"Gecikme / Duruş",items:["Rain Stop","Rain Stop Ended","Shore Breakdown","Ship Breakdown","Waiting Cargo","Waiting Trucks / Wagons","Shift Change / Meal Break","Holiday / Weekend Stop"],key:[]},
+ {name:"Kalkış",items:["Documents On Board","Pilot On Board (Out)","Tugs Fast","Let Go Last Line","Pilot Away","COSP (Commence Sea Passage)"],key:[]}
+];
+
+/* ---------- storage ---------- */
+const DBN="sof-defteri",ST="kv";let db=null;
+function openDB(){return new Promise(res=>{try{const r=indexedDB.open(DBN,1);r.onupgradeneeded=()=>r.result.createObjectStore(ST);r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>res()}catch(e){res()}})}
+function load(){return new Promise(res=>{
+  if(db){try{const q=db.transaction(ST).objectStore(ST).get("state");q.onsuccess=()=>res(q.result||null);q.onerror=()=>res(null);return}catch(e){}}
+  try{res(JSON.parse(localStorage.getItem("sof-state")||"null"))}catch(e){res(null)}
+})}
+let saveT=null;
+function save(){clearTimeout(saveT);saveT=setTimeout(()=>{
+  const v=JSON.parse(JSON.stringify(R));
+  if(db){try{db.transaction(ST,"readwrite").objectStore(ST).put(v,"state");return}catch(e){}}
+  try{localStorage.setItem("sof-state",JSON.stringify(v))}catch(e){}
+},250)}
+
+/* ---------- model ---------- */
+// R = { vessels:[{id,name,imo,flag,holds:[{id,name,cap}]}], sofs:[{id,vesselId,created,voyage,events,holds,entries}], cur, example }
+const blankRoot=()=>({vessels:[],sofs:[],cur:null,example:false,who:{}});
+const blankVoy=()=>({voyNo:"",port:"",berth:"",cargo:"",op:"Loading",qty:"",master:"",agent:"",charterer:""});
+const DEF_TALLY=["Kamyon","Vagon","Kepçe (grab)"];
+function newVessel(name,n){return{id:uid(),name:name||"",imo:"",flag:"",members:[],holds:Array.from({length:n||5},(_,i)=>({id:uid(),name:"Ambar "+(i+1),cap:""}))}}
+function newSof(v,voy){
+  const prev=R.sofs.filter(x=>x.vesselId===v.id&&x.tallies&&x.tallies.length).sort((a,b)=>b.created-a.created)[0];
+  return{id:uid(),vesselId:v.id,created:Date.now(),voyage:Object.assign(blankVoy(),voy||{}),events:[],
+  holds:v.holds.map(h=>({id:uid(),name:h.name,plan:0})),entries:[],
+  tallies:(prev?prev.tallies.map(t=>t.name):DEF_TALLY).map(n=>({id:uid(),name:n,unitW:""})),tallyEntries:[]}}
+function normalize(r){r.who=r.who||{};
+  r.vessels.forEach(v=>{v.members=v.members||[];v.holds=v.holds||[]});
+  r.sofs.forEach(s=>{s.tallies=s.tallies||DEF_TALLY.map(n=>({id:uid(),name:n,unitW:""}));s.tallyEntries=s.tallyEntries||[];s.entries=s.entries||[];s.events=s.events||[]});
+  return r}
+function migrate(d){const m=migrate0(d);return m?normalize(m):null}
+function migrate0(d){
+  if(!d)return null;
+  if(d.vessels)return Object.assign(blankRoot(),d);
+  if(d.events){ // v1 single-SOF format
+    const v=newVessel((d.voyage&&d.voyage.vessel)||"Gemi",0);
+    v.holds=(d.holds||[]).map(h=>({id:uid(),name:h.name,cap:""}));
+    const s={id:uid(),vesselId:v.id,created:Date.now(),voyage:Object.assign(blankVoy(),d.voyage||{}),events:d.events||[],holds:d.holds||[],entries:d.entries||[]};
+    delete s.voyage.vessel;
+    return{vessels:[v],sofs:[s],cur:s.id,example:!!d.example};
+  }
+  return null;
+}
+function sample(){
+  const r=blankRoot();r.example=true;
+  const v=newVessel("MV Örnek Yıldız",5);v.imo="9000000";v.flag="Malta";
+  v.members=[{id:uid(),name:"Mehmet K.",role:"Tallyman"},{id:uid(),name:"Ayşe T.",role:"Tallyman"},{id:uid(),name:"Kpt. A. Yılmaz",role:"Kaptan"}];
+  const M=v.members.map(m=>m.id);
+  r.vessels.push(v);r.who[v.id]=M[0];
+  const mk=(daysAgo,voy,evs,plans,done)=>{
+    const s=newSof(v,voy);const base=new Date();base.setDate(base.getDate()-daysAgo);base.setHours(5,40,0,0);
+    const at=(h,m)=>base.getTime()+(h*60+m)*60000;s.created=at(0,0);
+    evs.forEach(([l,h,m,n],i)=>s.events.push({id:uid(),t:at(h,m),label:l,note:n||"",photos:[],by:M[i<4?2:i%2]}));
+    s.holds.forEach((h,i)=>{h.plan=plans[i];(done[i]||[]).forEach((q,j)=>s.entries.push({id:uid(),holdId:h.id,qty:q,t:at(8+j*4+i,10),by:M[(i+j)%2]}))});
+    s.tallies.forEach((t,ti)=>{for(let k=0;k<[14,0,9][ti];k++)s.tallyEntries.push({id:uid(),tallyId:t.id,qty:ti===0&&k%5===0?3:1,t:at(7+k,ti*7),by:M[k%3===0?1:0],holdId:s.holds[k%s.holds.length].id})});
+    r.sofs.push(s);return s;
+  };
+  mk(41,{voyNo:"V-2609",port:"Tekirdağ",berth:"Ceyport",cargo:"Mısır (dökme)",op:"Discharging",qty:"18500"},
+    [["All Fast",2,0],["NOR Tendered",2,20],["Free Pratique Granted",3,0],["Initial Draft Survey Completed",4,30],["Commenced Discharging",5,10],["Completed Discharging",52,40],["Final Draft Survey Completed",54,0],["Let Go Last Line",56,15]],
+    [3800,3700,3600,3700,3700],[[3800],[3700],[3600],[3700],[3700]]);
+  const cur=mk(1,{voyNo:"V-2614",port:"Gemlik",berth:"Rıhtım 3",cargo:"Buğday (dökme)",op:"Loading",qty:"25000",master:"Kpt. A. Yılmaz",agent:"Örnek Acentelik"},
+    [["EOSP (End of Sea Passage)",0,0],["NOR Tendered",0,20,"NOR acenteye e-posta ile iletildi"],["Pilot On Board (In)",2,10],["All Fast",3,35,"İskele tarafı, 4+4 halat"],["Free Pratique Granted",3,50],["Holds Passed",4,50,"Tüm ambarlar temiz ve kuru"],["Initial Draft Survey Completed",6,15],["Commenced Loading",6,40],["Rain Stop",11,20,"Ambar kapakları kapatıldı"],["Rain Stop Ended",12,45],["Resumed",12,55]],
+    [5200,5000,4800,5000,5000],[[2100,1800],[2400,1500],[1600],[2000,900],[1200]]);
+  r.cur=cur.id;return r;
+}
+let R=blankRoot();
+const cur=()=>R.sofs.find(s=>s.id===R.cur)||null;
+const vesselOf=s=>s?R.vessels.find(v=>v.id===s.vesselId)||{name:"?",holds:[],members:[]}:null;
+let SES=null; // {role:"cap"|"staff", id}
+const isCap=()=>!!(SES&&SES.role==="cap");
+const me=()=>SES?(SES.role==="cap"?"cap":SES.id):null;
+const capName=()=>(R.auth&&R.auth.name)||"Kaptan";
+function mName(v,id){if(id==="cap")return capName();const m=(v.members||[]).find(x=>x.id===id);return m?m.name:"Belirtilmemiş"}
+// per-member totals for one SOF: {id:{ev,mt,tally:{tallyId:qty},n}}
+function memberStats(s){const o={};const g=id=>o[id||""]||(o[id||""]={ev:0,mt:0,tally:{},n:0});
+  s.events.forEach(e=>{const x=g(e.by);x.ev++;x.n++});
+  s.entries.forEach(e=>{const x=g(e.by);x.mt+=+e.qty||0;x.n++});
+  s.tallyEntries.forEach(e=>{const x=g(e.by);x.tally[e.tallyId]=(x.tally[e.tallyId]||0)+(+e.qty||0);x.n++});
+  return o}
+
+/* ---------- formatting ---------- */
+const DAYS=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
+const DAYS_EN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const p2=n=>String(n).padStart(2,"0");
+const fT=t=>{const d=new Date(t);return p2(d.getHours())+":"+p2(d.getMinutes())};
+const fD=t=>{const d=new Date(t);return p2(d.getDate())+"."+p2(d.getMonth()+1)+"."+d.getFullYear()};
+const fDay=t=>DAYS[new Date(t).getDay()];
+const fLocalInput=t=>{const d=new Date(t);return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate())+"T"+p2(d.getHours())+":"+p2(d.getMinutes())};
+const num=n=>(Math.round(n*1000)/1000).toLocaleString("tr-TR",{maximumFractionDigits:3});
+const sorted=s=>s.events.slice().sort((a,b)=>a.t-b.t);
+const span=s=>{const e=sorted(s);return e.length?[e[0].t,e[e.length-1].t]:[s.created,s.created]};
+const loadedOf=(s,hid)=>s.entries.filter(x=>x.holdId===hid).reduce((a,b)=>a+(+b.qty||0),0);
+const totals=s=>{const p=s.holds.reduce((a,h)=>a+(+h.plan||0),0),d=s.holds.reduce((a,h)=>a+loadedOf(s,h.id),0);return{p,d}};
+
+/* ---------- clock ---------- */
+function tick(){const n=Date.now();$("#clk").textContent=fT(n);$("#clkd").textContent=fD(n);$("#clkd").title=fDay(n)}
+setInterval(tick,15000);tick();
+
+/* ---------- tabs ---------- */
+let TAB="fleet";
+function go(t){if(!isCap())t="tally";TAB=t;
+  $$("nav.tabs button").forEach(x=>x.classList.toggle("on",x.dataset.tab===t));
+  $$("main section").forEach(s=>s.classList.toggle("on",s.id==="tab-"+t));
+  renderTab();window.scrollTo(0,0)}
+$$("nav.tabs button").forEach(b=>b.onclick=()=>go(b.dataset.tab));
+$("#brand").onclick=()=>{if(isCap())go("fleet")};
+$("#brand").onkeydown=e=>{if(e.key==="Enter")go("fleet")};
+
+const gate=msg=>`<div class="gate"><p style="margin:0">${msg||"Önce bir gemi ve SOF seçin."}</p><button class="btn pri" data-gofleet>Gemiler’e git</button></div>`;
+function wireGate(){$$("[data-gofleet]").forEach(b=>b.onclick=()=>go("fleet"))}
+
+/* ---------- header ---------- */
+function renderHeader(){const s=cur(),v=vesselOf(s);
+  $("#hdrVessel").textContent=s?[v.name,s.voyage.port,fD(span(s)[0])].filter(Boolean).join(" · "):"Gemi seçilmedi — dokunun";
+  const wb=$("#whoBtn");wb.hidden=!SES;
+  if(SES){wb.textContent=(isCap()?"⚓ ":"")+mName(v||{members:[]},me());wb.classList.remove("none")}
+  const nb=$$("nav.tabs button");nb.forEach(b=>b.hidden=!isCap()&&b.dataset.tab!=="tally");
+  $("nav.tabs .in").style.gridTemplateColumns=isCap()?"":"1fr"}
+$("#whoBtn").onclick=()=>accountSheet();
+
+/* pick who is entering data on this phone (per vessel) */
+function whoSheet(){const s=cur();if(!s)return;const v=vesselOf(s);const host=$("#sheetHost");
+  const draw=()=>{const id=me();
+    host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Kullanıcı seç">
+      <h3>Kim giriyor? · ${esc(v.name)}</h3>
+      <p class="note" style="margin:0">Bu telefondan yapılan her kayıt seçilen üyenin adına yazılır.</p>
+      <div class="pick">${v.members.map(m=>`<button data-m="${m.id}" class="${m.id===id?"on":""}">${esc(m.name)}<span>${esc(m.role||"")}</span></button>`).join("")||`<p class="note">Bu gemide henüz üye yok.</p>`}</div>
+      <div class="row"><input id="nmN" placeholder="Yeni üye adı" style="flex:2;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px"><input id="nmR" placeholder="Görev (Tallyman…)" style="flex:1.4;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px"><button class="btn pri" id="nmAdd">Ekle</button></div>
+      <div class="row" style="justify-content:space-between"><button class="btn ghost" id="toMembers">Üye istatistikleri</button><button class="btn ghost" id="wClose">Kapat</button></div>
+    </div></div>`;
+    host.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{R.who[v.id]=b.dataset.m;save();host.innerHTML="";renderHeader();toast(`Kayıtlar <b>${esc(mName(v,b.dataset.m))}</b> adına`)});
+    $("#nmAdd").onclick=()=>{const n=$("#nmN").value.trim();if(!n)return $("#nmN").focus();const m={id:uid(),name:n,role:$("#nmR").value.trim()};v.members.push(m);R.who[v.id]=m.id;save();renderHeader();draw()};
+    $("#toMembers").onclick=()=>membersSheet(v.id);
+    $("#wClose").onclick=()=>host.innerHTML="";
+    host.querySelector(".sheet-bg").onclick=e=>{if(e.target.classList.contains("sheet-bg"))host.innerHTML=""};
+  };draw()}
+
+/* member statistics: who entered how much, per SOF and all-time for the vessel */
+function membersSheet(vid){const v=R.vessels.find(x=>x.id===vid);const host=$("#sheetHost");
+  const sofs=R.sofs.filter(x=>x.vesselId===vid).sort((a,b)=>span(b)[0]-span(a)[0]);
+  let sel=(cur()&&cur().vesselId===vid)?cur().id:(sofs[0]?sofs[0].id:"all");
+  const draw=()=>{
+    const list=sel==="all"?sofs:sofs.filter(x=>x.id===sel);
+    // aggregate across chosen SOFs; tally aggregated by counter name
+    const agg={},tnames=new Set();
+    list.forEach(s=>{const ms=memberStats(s);Object.entries(ms).forEach(([id,x])=>{const a=agg[id]||(agg[id]={ev:0,mt:0,tally:{},n:0});
+      a.ev+=x.ev;a.mt+=x.mt;a.n+=x.n;Object.entries(x.tally).forEach(([tid,q])=>{const t=s.tallies.find(y=>y.id===tid);const nm=t?t.name:"?";tnames.add(nm);a.tally[nm]=(a.tally[nm]||0)+q})})});
+    const tn=[...tnames];
+    const ids=[...v.members.map(m=>m.id),...Object.keys(agg).filter(k=>!v.members.some(m=>m.id===k))];
+    const rows=ids.filter(id=>agg[id]||v.members.some(m=>m.id===id));
+    const sum=k=>rows.reduce((a,id)=>a+((agg[id]||{})[k]||0),0);
+    host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Üyeler">
+      <h3>Üyeler · ${esc(v.name)}</h3>
+      <label class="field">Dönem<select id="mSel"><option value="all"${sel==="all"?" selected":""}>Tüm SOF’lar (${sofs.length})</option>${sofs.map(s=>`<option value="${s.id}"${s.id===sel?" selected":""}>${fD(span(s)[0])} · ${esc(s.voyage.port||"Liman yok")}</option>`).join("")}</select></label>
+      <div class="tw"><table class="mstat"><thead><tr><th>Üye</th><th style="text-align:right">Olay</th><th style="text-align:right">Ambar MT</th>${tn.map(n=>`<th style="text-align:right">${esc(n)}</th>`).join("")}</tr></thead><tbody>
+      ${rows.map(id=>{const a=agg[id]||{ev:0,mt:0,tally:{}};const m=v.members.find(x=>x.id===id);
+        return `<tr><td>${esc(m?m.name:(id==="cap"?capName():id?"Silinmiş üye":"Belirtilmemiş"))}${m&&m.role?`<br><span style="color:var(--muted);font-size:12px">${esc(m.role)}</span>`:""}</td><td class="n">${a.ev}</td><td class="n">${num(a.mt)}</td>${tn.map(n=>`<td class="n">${num(a.tally[n]||0)}</td>`).join("")}</tr>`}).join("")||`<tr><td colspan="3" style="color:var(--muted)">Kayıt yok</td></tr>`}
+      ${rows.length?`<tr><th>Toplam</th><th style="text-align:right">${sum("ev")}</th><th style="text-align:right">${num(sum("mt"))}</th>${tn.map(n=>`<th style="text-align:right">${num(rows.reduce((a,id)=>a+(((agg[id]||{}).tally||{})[n]||0),0))}</th>`).join("")}</tr>`:""}
+      </tbody></table></div>
+      <h2 style="margin:6px 0 0">Üye listesi</h2>
+      <div class="hrows">${v.members.map((m,i)=>`<div class="hr"><input data-mn="${i}" value="${esc(m.name)}" aria-label="Ad"><input data-mr="${i}" value="${esc(m.role||"")}" placeholder="Görev" aria-label="Görev"><button class="x" data-mx="${i}" aria-label="Üyeyi çıkar">×</button></div><input class="pwin" data-mp="${i}" type="password" autocomplete="new-password" placeholder="${m.pw?"🔒 Şifre var · değiştirmek için yeni şifre yazın":"Şifre yok · giriş için şifre belirleyin"}" aria-label="${esc(m.name)} şifresi">`).join("")}</div>
+      <div class="row"><input id="mN" placeholder="Yeni üye adı" style="flex:2;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px"><input id="mR" placeholder="Görev" style="flex:1.4;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px"><input id="mP" type="password" autocomplete="new-password" placeholder="Şifre" style="flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px"><button class="btn pri" id="mAdd">Ekle</button></div>
+      <p class="note" style="margin:0">Üyeyi listeden çıkarmak geçmiş kayıtlarını silmez; tabloda “Silinmiş üye” olarak görünür.</p>
+      <div class="row" style="justify-content:flex-end"><button class="btn pri" id="mClose">Tamam</button></div>
+    </div></div>`;
+    const sync=()=>{host.querySelectorAll("[data-mn]").forEach(i=>{const m=v.members[+i.dataset.mn];m.name=i.value.trim()||m.name});
+      host.querySelectorAll("[data-mr]").forEach(i=>v.members[+i.dataset.mr].role=i.value.trim());
+      host.querySelectorAll("[data-mp]").forEach(i=>{if(!i.value)return;if(i.value.length<4){toast("Şifre en az 4 karakter olmalı");return}v.members[+i.dataset.mp].pw=mkPw(i.value);toast("Şifre kaydedildi")});save()};
+    $("#mSel").onchange=e=>{sync();sel=e.target.value;draw()};
+    host.querySelectorAll("[data-mx]").forEach(b=>b.onclick=()=>{if(!b.dataset.c){b.dataset.c=1;b.textContent="Sil?";b.style.color="var(--bad)";b.style.fontSize="13px";return}sync();v.members.splice(+b.dataset.mx,1);save();draw()});
+    $("#mAdd").onclick=()=>{sync();const n=$("#mN").value.trim();if(!n)return $("#mN").focus();const pw=$("#mP").value;if(pw&&pw.length<4)return toast("Şifre en az 4 karakter olmalı");
+      v.members.push({id:uid(),name:n,role:$("#mR").value.trim(),pw:pw?mkPw(pw):null});save();draw()};
+    $("#mClose").onclick=()=>{sync();host.innerHTML="";renderAll()};
+    host.querySelector(".sheet-bg").onclick=e=>{if(e.target.classList.contains("sheet-bg")){sync();host.innerHTML="";renderAll()}};
+  };draw()}
+
+/* ---------- FLEET ---------- */
+let Q="";
+$("#q").oninput=e=>{Q=e.target.value.trim().toLocaleLowerCase("tr-TR");renderFleet()};
+function sofMatches(s,v){if(!Q)return true;const [a,b]=span(s);
+  return [v.name,v.imo,s.voyage.port,s.voyage.cargo,s.voyage.voyNo,fD(a),fD(b)].join(" ").toLocaleLowerCase("tr-TR").includes(Q)}
+function renderFleet(){
+  $("#exBanner").hidden=!R.example;
+  const s=cur(),v=vesselOf(s);
+  $("#activeCard").innerHTML=s?`<div class="active-card"><div><span>Aktif SOF</span><b>${esc(v.name)}</b><p>${esc([s.voyage.port,s.voyage.cargo,s.voyage.voyNo].filter(Boolean).join(" · "))} · ${fD(span(s)[0])}</p></div><button class="btn pri" data-goev>Olay Bas →</button></div>`:"";
+  if(s)$("[data-goev]").onclick=()=>go("ev");
+  if(!R.vessels.length){$("#vesselList").innerHTML=`<div class="gate"><p style="margin:0">Henüz gemi yok. Gemiyi ve ambarlarını bir kez tanımlayın; her limanda yeni SOF açarsınız.</p><button class="btn pri" id="addV2">+ İlk gemiyi ekle</button></div>`;$("#addV2").onclick=()=>vesselSheet(null);return}
+  const vs=R.vessels.slice().sort((a,b)=>a.name.localeCompare(b.name,"tr"));
+  let any=false;
+  $("#vesselList").innerHTML=vs.map(v=>{
+    const sofs=R.sofs.filter(x=>x.vesselId===v.id).sort((a,b)=>span(b)[0]-span(a)[0]);
+    const nameHit=!Q||v.name.toLocaleLowerCase("tr-TR").includes(Q);
+    const shown=nameHit?sofs:sofs.filter(x=>sofMatches(x,v));
+    if(Q&&!nameHit&&!shown.length)return"";any=true;
+    return `<div class="vcard" data-v="${v.id}">
+      <div class="vhead"><div><h3>${esc(v.name)}</h3><small>${v.holds.length} ambar${v.imo?" · IMO "+esc(v.imo):""}${v.flag?" · "+esc(v.flag):""} · ${sofs.length} SOF</small></div>
+      <div class="row"><button class="btn sm ghost" data-mem>Üyeler (${v.members.length})</button><button class="btn sm ghost" data-editv>Gemi / ambarlar</button><button class="btn sm pri" data-newsof>+ Yeni SOF</button></div></div>
+      ${shown.length?`<ul class="sofs">${shown.map(x=>{const [a,b]=span(x),t=totals(x);return `<li class="${x.id===R.cur?"act":""}"><button class="open" data-sof="${x.id}">
+        <div class="d">${fD(a)}<small>${fD(b)===fD(a)?fDay(a):"→ "+fD(b)}</small></div>
+        <div class="i"><b>${esc(x.voyage.port||"Liman yok")}${x.id===R.cur?'<span class="badge">Aktif</span>':""}</b><span>${esc([x.voyage.cargo,x.voyage.op==="Discharging"?"Tahliye":"Yükleme",x.voyage.voyNo].filter(Boolean).join(" · "))} · ${x.events.length} olay</span></div>
+        <div class="q">${num(t.d)}<br><span style="color:var(--muted)">/ ${num(t.p)} MT</span></div></button></li>`}).join("")}</ul>`:`<p class="note" style="margin:0">Bu gemi için henüz SOF yok.</p>`}
+    </div>`}).join("")||"";
+  if(Q&&!any)$("#vesselList").innerHTML=`<p class="empty">“${esc(Q)}” için kayıt bulunamadı.</p>`;
+  $$(".vcard").forEach(el=>{const v=R.vessels.find(x=>x.id===el.dataset.v);
+    el.querySelector("[data-editv]").onclick=()=>vesselSheet(v.id);
+    el.querySelector("[data-mem]").onclick=()=>membersSheet(v.id);
+    el.querySelector("[data-newsof]").onclick=()=>sofSheet(v.id);
+    el.querySelectorAll("[data-sof]").forEach(b=>b.onclick=()=>{R.cur=b.dataset.sof;save();renderHeader();toast("SOF açıldı");go("ev")});
+  });
+}
+$("#addVessel").onclick=()=>vesselSheet(null);
+$("#clearEx").onclick=()=>{R=Object.assign(blankRoot(),{auth:R.auth});save();renderAll()};
+
+/* vessel sheet: name + hold template */
+function vesselSheet(id){
+  const orig=id?R.vessels.find(v=>v.id===id):null;
+  const v=orig?JSON.parse(JSON.stringify(orig)):newVessel("",5);
+  const host=$("#sheetHost");let cDel=false;
+  const draw=()=>{
+    host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Gemi">
+      <h3>${orig?"Gemiyi düzenle":"Yeni gemi"}</h3>
+      <label class="field">Gemi adı<input id="vN" value="${esc(v.name)}" placeholder="Örn. MV Cemile"></label>
+      <div class="row"><label class="field" style="flex:1">IMO no<input id="vI" inputmode="numeric" value="${esc(v.imo)}"></label><label class="field" style="flex:1">Bayrak<input id="vF" value="${esc(v.flag)}"></label></div>
+      <div class="field">Ambarlar (ad · kapasite MT, isteğe bağlı)<div class="hrows">${v.holds.map((h,i)=>`<div class="hr"><input data-hn="${i}" value="${esc(h.name)}" aria-label="Ambar adı"><input data-hc="${i}" inputmode="decimal" placeholder="Kapasite" value="${esc(h.cap)}" aria-label="Kapasite"><button class="x" data-hx="${i}" aria-label="Ambarı çıkar">×</button></div>`).join("")}</div></div>
+      <button class="btn sm ghost" id="vAdd" style="align-self:flex-start">+ Ambar ekle</button>
+      <p class="note" style="margin:0">Ambar listesi yeni açılan SOF’lara şablon olarak kopyalanır. Eski SOF’lar değişmez.</p>
+      <div class="row" style="justify-content:space-between">
+        ${orig?`<button class="btn danger" id="vDel">${cDel?"Gemi ve tüm SOF’ları silinsin":"Gemiyi sil"}</button>`:"<span></span>"}
+        <div class="row"><button class="btn ghost" id="vCancel">Vazgeç</button><button class="btn pri" id="vSave">Kaydet</button></div>
+      </div></div></div>`;
+    const sync=()=>{v.name=$("#vN").value.trim();v.imo=$("#vI").value.trim();v.flag=$("#vF").value.trim();
+      host.querySelectorAll("[data-hn]").forEach(i=>v.holds[+i.dataset.hn].name=i.value.trim()||("Ambar "+(+i.dataset.hn+1)));
+      host.querySelectorAll("[data-hc]").forEach(i=>v.holds[+i.dataset.hc].cap=i.value.trim())};
+    $("#vAdd").onclick=()=>{sync();v.holds.push({id:uid(),name:"Ambar "+(v.holds.length+1),cap:""});draw()};
+    host.querySelectorAll("[data-hx]").forEach(b=>b.onclick=()=>{sync();v.holds.splice(+b.dataset.hx,1);draw()});
+    $("#vCancel").onclick=()=>host.innerHTML="";
+    host.querySelector(".sheet-bg").onclick=e=>{if(e.target.classList.contains("sheet-bg"))host.innerHTML=""};
+    if(orig)$("#vDel").onclick=()=>{if(!cDel){sync();cDel=true;draw();return}
+      R.vessels=R.vessels.filter(x=>x.id!==id);R.sofs=R.sofs.filter(x=>x.vesselId!==id);if(!cur())R.cur=null;save();host.innerHTML="";renderAll()};
+    $("#vSave").onclick=()=>{sync();if(!v.name){$("#vN").focus();$("#vN").placeholder="Gemi adı gerekli";return}
+      if(orig)Object.assign(orig,v);else R.vessels.push(v);R.example=R.example&&!!orig;save();host.innerHTML="";renderAll();
+      if(!orig)sofSheet(v.id)};
+  };draw();
+}
+
+/* new SOF sheet */
+function sofSheet(vid){
+  const v=R.vessels.find(x=>x.id===vid);const host=$("#sheetHost");
+  const last=R.sofs.filter(x=>x.vesselId===vid).sort((a,b)=>b.created-a.created)[0];
+  host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Yeni SOF">
+    <h3>${esc(v.name)} · Yeni SOF</h3>
+    <div class="form">
+      <label class="field">Liman<input id="sP" placeholder="Örn. Gemlik"></label>
+      <label class="field">Rıhtım<input id="sB"></label>
+      <label class="field">Yük<input id="sC" value="${esc(last?last.voyage.cargo:"")}"></label>
+      <label class="field">Operasyon<select id="sO"><option value="Loading">Yükleme (Loading)</option><option value="Discharging">Tahliye (Discharging)</option></select></label>
+      <label class="field">Sefer no<input id="sV"></label>
+      <label class="field">Kaptan<input id="sM" value="${esc(last?last.voyage.master:"")}"></label>
+    </div>
+    <p class="note" style="margin:0">Geçmiş bir seferi giriyorsanız olayları “Kayıt” sekmesinden “+ Elle olay ekle” ile istediğiniz tarih ve saatle ekleyin.</p>
+    <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="sCancel">Vazgeç</button><button class="btn pri" id="sSave">SOF’u aç</button></div>
+  </div></div>`;
+  $("#sCancel").onclick=()=>host.innerHTML="";
+  host.querySelector(".sheet-bg").onclick=e=>{if(e.target.classList.contains("sheet-bg"))host.innerHTML=""};
+  $("#sSave").onclick=()=>{const s=newSof(v,{port:$("#sP").value.trim(),berth:$("#sB").value.trim(),cargo:$("#sC").value.trim(),op:$("#sO").value,voyNo:$("#sV").value.trim(),master:$("#sM").value.trim(),agent:last?last.voyage.agent:""});
+    R.sofs.push(s);R.cur=s.id;save();host.innerHTML="";renderHeader();toast(`${esc(v.name)} için yeni SOF açıldı`);go("ev")};
+}
+
+/* ---------- EVENTS (tap) ---------- */
+function lastOf(s,label){let r=null;for(const e of s.events)if(e.label===label&&(!r||e.t>r.t))r=e;return r}
+function renderTaps(){const s=cur();
+  if(!s){$("#tapGroups").innerHTML=gate();wireGate();return}
+  $("#tapGroups").innerHTML=GROUPS.map((g,gi)=>`<h2>${esc(g.name)}</h2><div class="grid">${
+    g.items.map(l=>{const e=lastOf(s,l);return `<button class="tap${g.key.includes(l)?" key":""}${e?" done":""}" data-l="${esc(l)}"><b>${esc(l)}</b><i>${e?fD(e.t).slice(0,5)+" "+fT(e.t):"Bas → saat kaydet"}</i></button>`}).join("")
+  }${gi===GROUPS.length-1?`<button class="tap custom" id="customTap"><b>+ Diğer olay</b></button>`:""}</div>`).join("");
+  $$(".tap[data-l]").forEach(b=>b.onclick=()=>stamp(b.dataset.l));
+  $("#customTap").onclick=()=>openEditor(null,true);
+}
+function stamp(label){const s=cur();if(!s)return;
+  const e={id:uid(),t:Date.now(),label,note:"",photos:[],by:me()};
+  s.events.push(e);save();renderHeader();renderTab();
+  if(navigator.vibrate)try{navigator.vibrate(30)}catch(x){}
+  toast(`<span><b>${fT(e.t)}</b> ${esc(label)}</span>`,[
+    ["Not / Foto",()=>openEditor(e.id)],
+    ["Geri al",()=>{s.events=s.events.filter(x=>x.id!==e.id);save();renderTab()}]]);
+}
+
+/* ---------- toast ---------- */
+let toastT=null;
+function toast(html,actions=[]){
+  const h=$("#toastHost");h.innerHTML=`<div class="toast" role="status">${html}${actions.map((a,i)=>`<button data-i="${i}">${a[0]}</button>`).join("")}</div>`;
+  h.querySelectorAll("button").forEach(b=>b.onclick=()=>{h.innerHTML="";actions[b.dataset.i][1]()});
+  clearTimeout(toastT);toastT=setTimeout(()=>h.innerHTML="",6000);
+}
+
+/* ---------- LOG ---------- */
+function renderLog(){const s=cur();
+  if(!s){$("#logWrap").innerHTML=gate();wireGate();return}
+  const ev=sorted(s);let html="",lastDay="";
+  ev.forEach(e=>{const d=fD(e.t);if(d!==lastDay){lastDay=d;html+=`<li class="daysep">${d} · ${fDay(e.t)}</li>`}
+    html+=`<li><div class="t">${fT(e.t)}<small>${d.slice(0,5)}</small></div><div class="e"><b>${esc(e.label)}</b>${e.by?`<span style="color:var(--muted);font-size:12px"> · ${esc(mName(vesselOf(s),e.by))}</span>`:""}${e.note?`<p>${esc(e.note)}</p>`:""}${e.photos.length?`<div class="thumbs">${e.photos.map(p=>`<img src="${p}" alt="">`).join("")}</div>`:""}</div><button class="btn sm ghost" data-ed="${e.id}">Düzenle</button></li>`});
+  $("#logWrap").innerHTML=`<div class="row" style="justify-content:space-between"><h2 style="margin:4px 0 8px">${esc(vesselOf(s).name)} · ${esc(s.voyage.port||"")}</h2><button class="btn sm ghost" id="addManual">+ Elle olay ekle</button></div>
+    <ul class="log">${html||`<li class="empty">Henüz olay yok. “Olay Bas” sekmesinde bir düğmeye dokunun veya geçmiş olayı elle ekleyin.</li>`}</ul>`;
+  $("#addManual").onclick=()=>openEditor(null,true);
+  $$("[data-ed]").forEach(b=>b.onclick=()=>openEditor(b.dataset.ed));
+}
+
+/* ---------- photo compression ---------- */
+function compress(file){return new Promise((res,rej)=>{
+  const r=new FileReader();r.onerror=rej;r.onload=()=>{const img=new Image();img.onerror=rej;img.onload=()=>{
+    const M=1280,sc=Math.min(1,M/Math.max(img.width,img.height));const c=document.createElement("canvas");
+    c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    res(c.toDataURL("image/jpeg",0.7))};img.src=r.result};r.readAsDataURL(file)})}
+
+/* ---------- event editor ---------- */
+function openEditor(id,isNew){const s=cur();if(!s)return;
+  const orig=id?s.events.find(e=>e.id===id):null;
+  // manual entry in a past SOF defaults to that SOF's last event time
+  const lastT=s.events.length?sorted(s).slice(-1)[0].t:Date.now();
+  const e=orig?JSON.parse(JSON.stringify(orig)):{id:uid(),t:(Date.now()-lastT>3*864e5)?lastT:Date.now(),label:"",note:"",photos:[],by:me()};
+  const host=$("#sheetHost");let confirmDel=false;
+  const draw=()=>{
+    host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Olay">
+      <h3>${isNew?"Yeni olay":"Olayı düzenle"}</h3>
+      <label class="field">Olay<input id="edL" list="evlist" value="${esc(e.label)}" placeholder="Örn. Hatch covers opened"></label>
+      <datalist id="evlist">${GROUPS.flatMap(g=>g.items).map(l=>`<option value="${esc(l)}">`).join("")}</datalist>
+      <div class="row"><label class="field" style="flex:1">Tarih ve saat<input type="datetime-local" id="edT" value="${fLocalInput(e.t)}"></label>
+      <button class="btn sm ghost" id="edNow" style="align-self:flex-end">Şimdi</button></div>
+      <label class="field">Açıklama<textarea id="edN" rows="3" placeholder="Ayrıntı, kişi, sebep…">${esc(e.note)}</textarea></label>
+      <div class="field">Fotoğraflar<div class="phgrid">${e.photos.map((p,i)=>`<div class="ph"><img src="${p}" alt=""><button data-rm="${i}" aria-label="Fotoğrafı sil">×</button></div>`).join("")}
+        <label class="addph">+ Fotoğraf çek / seç<input type="file" id="edP" accept="image/*" capture="environment" multiple></label></div></div>
+      <div class="row" style="justify-content:space-between">
+        ${orig?`<button class="btn danger" id="edDel">${confirmDel?"Silmeyi onayla":"Sil"}</button>`:"<span></span>"}
+        <div class="row"><button class="btn ghost" id="edCancel">Vazgeç</button>${isNew?`<button class="btn ghost" id="edSaveNext">Kaydet + yeni</button>`:""}<button class="btn pri" id="edSave">Kaydet</button></div>
+      </div></div></div>`;
+    const sync=()=>{e.label=$("#edL").value.trim();e.note=$("#edN").value;const v=$("#edT").value;if(v)e.t=new Date(v).getTime()};
+    $("#edNow").onclick=()=>{sync();e.t=Date.now();draw()};
+    host.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{sync();e.photos.splice(+b.dataset.rm,1);draw()});
+    $("#edP").onchange=async ev=>{sync();for(const f of ev.target.files){try{e.photos.push(await compress(f))}catch(x){}}draw()};
+    $("#edCancel").onclick=()=>host.innerHTML="";
+    host.querySelector(".sheet-bg").onclick=ev=>{if(ev.target.classList.contains("sheet-bg"))host.innerHTML=""};
+    if(orig)$("#edDel").onclick=()=>{if(!confirmDel){sync();confirmDel=true;draw();return}s.events=s.events.filter(x=>x.id!==id);save();host.innerHTML="";renderHeader();renderTab()};
+    const commit=()=>{sync();if(!e.label){$("#edL").focus();$("#edL").placeholder="Olay adı gerekli";return false}
+      if(orig)Object.assign(orig,e);else s.events.push(e);save();renderHeader();renderTab();return true};
+    $("#edSave").onclick=()=>{if(commit())host.innerHTML=""};
+    if(isNew)$("#edSaveNext").onclick=()=>{if(commit()){const t=e.t;host.innerHTML="";toast("Kaydedildi");
+      Object.assign(e,{id:uid(),label:"",note:"",photos:[],t,by:me()});draw()}};
+  };draw();
+}
+
+/* ---------- TALLY ---------- */
+const tHold={}; // selected hold per SOF (in-memory)
+const tallyOf=(s,tid,hid)=>s.tallyEntries.filter(x=>x.tallyId===tid&&(!hid||x.holdId===hid)).reduce((a,b)=>a+(+b.qty||0),0);
+function renderTally(){const s=cur();
+  if(!s){$("#tallyWrap").innerHTML=gate();wireGate();return}
+  const v=vesselOf(s),hid=tHold[s.id]||"",who=me();
+  $("#tallyWrap").innerHTML=`
+    ${isCap()?"":`<div class="banner"><span><b>${esc(mName(v,who))}</b> · ${esc(v.name)}${s.voyage.port?" · "+esc(s.voyage.port):""}</span><button class="btn sm dark" id="tSend">Sayımlarımı gönder</button></div>`}
+    <div class="tbar" role="tablist" aria-label="Ambar"><button data-th="" class="${hid?"":"on"}">Ambarsız</button>${s.holds.map(h=>`<button data-th="${h.id}" class="${h.id===hid?"on":""}">${esc(h.name)}</button>`).join("")}</div>
+    <div class="tallies">${s.tallies.map(t=>{const tot=tallyOf(s,t.id),inH=hid?tallyOf(s,t.id,hid):null;
+      const per={};s.tallyEntries.filter(x=>x.tallyId===t.id).forEach(x=>per[x.by||""]=(per[x.by||""]||0)+(+x.qty||0));
+      const ents=s.tallyEntries.filter(x=>x.tallyId===t.id).sort((a,b)=>b.t-a.t);
+      const uw=parseFloat(String(t.unitW).replace(",","."));
+      return `<div class="tcard" data-t="${t.id}">
+        <header><b>${esc(t.name)}</b>${isCap()?`<button class="btn sm ghost" data-tset>Ayarlar</button>`:""}</header>
+        <div class="tcount">${num(tot)}<small>adet${uw?` · ≈ ${num(tot*uw)} MT`:""}</small></div>
+        ${hid?`<div class="note" style="margin:-4px 0 0">${esc((s.holds.find(h=>h.id===hid)||{}).name)}: <b class="mono" style="color:var(--ink)">${num(inH)}</b> adet</div>`:""}
+        <button class="tplus" data-tp>+1</button>
+        <div class="tline"><button class="btn ghost" data-tun title="Son kaydı geri al">−1</button><input type="number" inputmode="numeric" step="any" placeholder="Adet gir" data-tq aria-label="Adet"><button class="btn pri" data-tadd>Ekle</button></div>
+        <div class="byuser">${Object.keys(per).length?Object.entries(per).map(([id,q])=>`<span>${esc(mName(v,id))}: <b>${num(q)}</b></span>`).join(""):"Henüz sayım yok"}</div>
+        <details class="entries"${ents.length?"":" hidden"}><summary>${ents.length} kayıt</summary><ul>${ents.slice(0,60).map(x=>`<li><span class="mono">${fD(x.t).slice(0,5)} ${fT(x.t)}</span><span style="color:var(--muted);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(mName(v,x.by))}${x.holdId?" · "+esc((s.holds.find(h=>h.id===x.holdId)||{name:""}).name):""}</span><b>${num(+x.qty)}</b>${isCap()||x.by===who?`<button class="x" data-tdel="${x.id}" aria-label="Kaydı sil">×</button>`:""}</li>`).join("")}</ul></details>
+      </div>`}).join("")}</div>
+    ${isCap()?"":"<!--"}<div class="row" style="margin-top:12px"><input id="tNew" placeholder="Yeni sayaç (örn. Big bag, Palet, Konteyner)" style="flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 12px;font-size:15px"><button class="btn pri" id="tNewBtn">+ Sayaç ekle</button></div>${isCap()?"":"-->"}`;
+  if(!isCap())$("#tSend").onclick=()=>sendSheet();
+  $$("[data-th]").forEach(b=>b.onclick=()=>{tHold[s.id]=b.dataset.th;renderTally()});
+  const addT=()=>{const n=$("#tNew").value.trim();if(!n)return $("#tNew").focus();s.tallies.push({id:uid(),name:n,unitW:""});save();renderTally()};
+  if(isCap()){$("#tNewBtn").onclick=addT;$("#tNew").onkeydown=e=>{if(e.key==="Enter")addT()}}
+  $$(".tcard").forEach(el=>{const t=s.tallies.find(x=>x.id===el.dataset.t);
+    const push=q=>{s.tallyEntries.push({id:uid(),tallyId:t.id,qty:q,t:Date.now(),by:me(),holdId:hid||null});save();renderTally();
+      if(navigator.vibrate)try{navigator.vibrate(20)}catch(x){}};
+    el.querySelector("[data-tp]").onclick=()=>push(1);
+    const q=el.querySelector("[data-tq]");
+    const add=()=>{const n=parseFloat(String(q.value).replace(",","."));if(!n)return q.focus();push(n);toast(`<span>${esc(t.name)}: <b>+${num(n)}</b></span>`)};
+    el.querySelector("[data-tadd]").onclick=add;q.onkeydown=e=>{if(e.key==="Enter")add()};
+    el.querySelector("[data-tun]").onclick=()=>{const mine=s.tallyEntries.filter(x=>x.tallyId===t.id&&(x.by||null)===me()).sort((a,b)=>b.t-a.t)[0];
+      if(!mine)return toast("Geri alınacak kaydınız yok");s.tallyEntries=s.tallyEntries.filter(x=>x!==mine);save();renderTally();toast(`${esc(t.name)}: son kayıt (${num(mine.qty)}) geri alındı`)};
+    el.querySelectorAll("[data-tdel]").forEach(b=>b.onclick=()=>{if(!b.dataset.c){b.dataset.c=1;b.textContent="Sil?";b.style.color="var(--bad)";b.style.fontSize="13px";return}
+      s.tallyEntries=s.tallyEntries.filter(x=>x.id!==b.dataset.tdel);save();renderTally()});
+    if(isCap())el.querySelector("[data-tset]").onclick=()=>tallySheet(t.id);
+  });
+}
+function tallySheet(tid){const s=cur();const t=s.tallies.find(x=>x.id===tid);const host=$("#sheetHost");let c=false;
+  const draw=()=>{host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Sayaç">
+    <h3>Sayaç ayarları</h3>
+    <label class="field">Sayaç adı<input id="tsN" value="${esc(t.name)}"></label>
+    <label class="field">Birim ağırlık (MT, isteğe bağlı)<input id="tsW" inputmode="decimal" value="${esc(t.unitW)}" placeholder="Örn. kamyon başına 27"></label>
+    <div class="row" style="justify-content:space-between"><button class="btn danger" id="tsDel">${c?"Sayaç ve tüm sayımları silinsin":"Sayacı sil"}</button>
+    <div class="row"><button class="btn ghost" id="tsC">Vazgeç</button><button class="btn pri" id="tsS">Kaydet</button></div></div></div></div>`;
+    $("#tsC").onclick=()=>host.innerHTML="";
+    host.querySelector(".sheet-bg").onclick=e=>{if(e.target.classList.contains("sheet-bg"))host.innerHTML=""};
+    $("#tsDel").onclick=()=>{if(!c){c=true;draw();return}s.tallies=s.tallies.filter(x=>x.id!==tid);s.tallyEntries=s.tallyEntries.filter(x=>x.tallyId!==tid);save();host.innerHTML="";renderTally()};
+    $("#tsS").onclick=()=>{t.name=$("#tsN").value.trim()||t.name;t.unitW=$("#tsW").value.trim();save();host.innerHTML="";renderTally()};
+  };draw()}
+
+/* ---------- HOLDS ---------- */
+function renderHolds(){const s=cur();
+  if(!s){$("#holdWrap").innerHTML=gate();wireGate();return}
+  const {p:plan,d:done}=totals(s),rem=plan-done,pct=plan?Math.min(100,done/plan*100):0;
+  const verb=s.voyage.op==="Discharging"?"Tahliye":"Yüklenen";
+  const vh=vesselOf(s).holds;
+  $("#holdWrap").innerHTML=`<div class="sum"><div><span>Plan</span><b>${num(plan)}</b></div><div><span>${verb}</span><b>${num(done)}</b></div><div><span>Kalan</span><b>${num(rem)}</b></div>
+    <div class="bar"><i style="width:${pct}%"></i></div><div class="pct">%${pct.toFixed(1)} tamamlandı · metrik ton (MT) · ${esc(vesselOf(s).name)}</div></div>
+    <div class="holds">${s.holds.map(h=>{const d=loadedOf(s,h.id),r=(+h.plan||0)-d,p=h.plan?d/h.plan*100:0;
+      const cap=(vh.find(x=>x.name===h.name)||{}).cap;
+      const ents=s.entries.filter(x=>x.holdId===h.id).sort((a,b)=>b.t-a.t);
+      return `<div class="hold" data-h="${h.id}">
+        <header><input value="${esc(h.name)}" data-name aria-label="Ambar adı"><button class="x" data-delh title="Ambarı sil">×</button></header>
+        <div class="hstats"><div>Plan<b>${num(+h.plan||0)}</b></div><div>${verb}<b>${num(d)}</b></div><div>Kalan<b style="color:${r<0?"var(--warn)":"inherit"}">${num(r)}</b></div></div>
+        <div class="hbar${p>100?" over":""}"><i style="width:${Math.min(100,p)}%"></i></div>
+        <label class="field">Plan miktarı (MT)${cap?` · kapasite ${esc(cap)}`:""}<input type="number" inputmode="decimal" step="any" min="0" value="${h.plan||""}" data-plan></label>
+        <div class="addq"><input style="border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px;min-width:0;width:100%" type="number" inputmode="decimal" step="any" placeholder="Miktar (MT)" data-q aria-label="Eklenecek miktar"><button class="btn pri" data-add>+ Ekle</button></div>
+        <details class="entries"${ents.length?"":" hidden"}><summary>${ents.length} kayıt · tarih düzeltilebilir</summary><ul>${ents.map(x=>`<li><input type="datetime-local" value="${fLocalInput(x.t)}" data-et="${x.id}" aria-label="Kayıt zamanı"><span style="color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${x.by?esc(mName(vesselOf(s),x.by)):""}</span><b>${num(+x.qty)}</b><button class="x" data-dele="${x.id}" aria-label="Kaydı sil">×</button></li>`).join("")}</ul></details>
+      </div>`}).join("")}</div>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" id="addHold">+ Ambar ekle</button>
+    <span class="note">Plan miktarını girin, her yüklemede “Ekle” ile miktarı yazın; kalan otomatik hesaplanır.</span></div>`;
+  $("#addHold").onclick=()=>{s.holds.push({id:uid(),name:"Ambar "+(s.holds.length+1),plan:0});save();renderHolds()};
+  $$(".hold").forEach(el=>{const h=s.holds.find(x=>x.id===el.dataset.h);
+    el.querySelector("[data-name]").onchange=ev=>{h.name=ev.target.value||h.name;save()};
+    el.querySelector("[data-plan]").onchange=ev=>{h.plan=+ev.target.value||0;save();renderHolds()};
+    const q=el.querySelector("[data-q]");
+    const add=()=>{const v=parseFloat(String(q.value).replace(",","."));if(!v)return q.focus();s.entries.push({id:uid(),holdId:h.id,qty:v,t:Date.now(),by:me()});save();renderHolds();toast(`<span>${esc(h.name)}: <b>+${num(v)} MT</b></span>`)};
+    el.querySelector("[data-add]").onclick=add;q.onkeydown=ev=>{if(ev.key==="Enter")add()};
+    el.querySelectorAll("[data-et]").forEach(i=>i.onchange=()=>{const x=s.entries.find(y=>y.id===i.dataset.et);if(x&&i.value){x.t=new Date(i.value).getTime();save()}});
+    el.querySelectorAll("[data-dele]").forEach(b=>b.onclick=()=>{if(b.dataset.c){s.entries=s.entries.filter(x=>x.id!==b.dataset.dele);save();renderHolds()}else{b.dataset.c=1;b.textContent="Sil?";b.style.color="var(--bad)";b.style.fontSize="13px"}});
+    const dh=el.querySelector("[data-delh]");dh.onclick=()=>{if(dh.dataset.c){s.holds=s.holds.filter(x=>x.id!==h.id);s.entries=s.entries.filter(x=>x.holdId!==h.id);save();renderHolds()}else{dh.dataset.c=1;dh.textContent="Sil?";dh.style.color="var(--bad)";dh.style.fontSize="13px"}};
+  });
+}
+
+/* ---------- REPORT ---------- */
+const VF=[["voyNo","Sefer no"],["port","Liman"],["berth","Rıhtım / şamandıra"],["cargo","Yük"],["qty","Konşimento / B/L miktarı (MT)"],["op","Operasyon"],["master","Kaptan"],["agent","Acente"],["charterer","Kiracı / Charterer"]];
+function renderRep(){const s=cur();
+  if(!s){$("#repWrap").innerHTML=gate();wireGate();return}
+  const v=vesselOf(s);
+  $("#repWrap").innerHTML=`<div class="noprint">
+      <h2>Sefer Bilgileri · ${esc(v.name)}</h2>
+      <div class="form">${VF.map(([k,l])=>k==="op"
+        ?`<label class="field">${l}<select id="v_${k}"><option value="Loading"${s.voyage.op==="Loading"?" selected":""}>Yükleme (Loading)</option><option value="Discharging"${s.voyage.op==="Discharging"?" selected":""}>Tahliye (Discharging)</option></select></label>`
+        :`<label class="field">${l}<input id="v_${k}" value="${esc(s.voyage[k])}"${k==="qty"?' inputmode="decimal"':""}></label>`).join("")}</div>
+      <h2>Çıktı</h2>
+      <div class="row">
+        <button class="btn pri" id="printBtn"${inFrame?" hidden":""}>Yazdır / PDF kaydet</button>
+        <button class="btn ghost" id="copyBtn">Metin olarak kopyala</button>
+      </div>
+      <p class="note"${inFrame?"":" hidden"}>Yazdırma bu önizleme penceresinde kapalı. <b>sof-defteri.html</b> dosyasını telefonunuzun tarayıcısında açın; orada “Yazdır / PDF kaydet” çalışır.</p>
+      <textarea class="copybox" id="copyBox" hidden readonly></textarea>
+      <h2>Personel telefonları</h2>
+      <div class="row">
+        <button class="btn dark" id="packBtn">Personel paketi hazırla</button>
+        <button class="btn ghost" id="impBtn">Personel sayımını al</button>
+      </div>
+      <p class="note">Paket; bu SOF’u, sayaçları ve personel şifrelerini içerir (fotoğraflar hariç). Personel telefonunda giriş ekranından yüklenir. Personel “Sayımlarımı gönder” ile kod yollar, siz burada “Personel sayımını al” ile eklersiniz.</p>
+      <h2>Yedek (tüm gemiler)</h2>
+      <div class="row">
+        <button class="btn ghost" id="expBtn"${inFrame?" hidden":""}>Yedeği indir (.json)</button>
+        <label class="btn ghost" style="display:inline-flex;align-items:center">Yedek / paket dosyası yükle<input type="file" id="impFile" accept="application/json,.json,.txt" hidden></label>
+        <button class="btn danger" id="delSof">Bu SOF’u sil</button>
+      </div>
+      <p class="note">Kayıtlar yalnızca bu telefonda, bu tarayıcıda saklanır. Düzenli yedek alın.</p>
+      <h2>Önizleme</h2>
+    </div>
+    <div class="rep" id="report"></div>`;
+  VF.forEach(([k])=>{$("#v_"+k).oninput=ev=>{s.voyage[k]=ev.target.value;save();renderHeader();renderReport()}});
+  $("#printBtn").onclick=()=>{renderReport();window.print()};
+  $("#copyBtn").onclick=()=>{const txt=reportText(s);const box=$("#copyBox");
+    const fb=()=>{box.hidden=false;box.value=txt;box.focus();box.select();toast("Metin seçildi, kopyalayın")};
+    try{navigator.clipboard.writeText(txt).then(()=>toast("Rapor metni kopyalandı"),fb)}catch(e){fb()}};
+  $("#expBtn").onclick=()=>{const b=new Blob([JSON.stringify(R)],{type:"application/json"});const a=document.createElement("a");
+    a.href=URL.createObjectURL(b);a.download=`SOF_yedek_${fD(Date.now()).replace(/\./g,"-")}.json`;document.body.appendChild(a);a.click();a.remove()};
+  $("#impFile").onchange=ev=>fileImport(ev);
+  $("#packBtn").onclick=()=>packSheet();
+  $("#impBtn").onclick=()=>pasteSheet();
+  const ds=$("#delSof");ds.onclick=()=>{if(!ds.dataset.c){ds.dataset.c=1;ds.textContent="Bu SOF silinsin mi? Onayla";return}
+    R.sofs=R.sofs.filter(x=>x.id!==s.id);R.cur=null;save();renderHeader();toast("SOF silindi");go("fleet")};
+  renderReport();
+}
+function renderReport(){const s=cur();if(!s||!$("#report"))return;
+  const v=s.voyage,ves=vesselOf(s),ev=sorted(s),{p:plan,d:done}=totals(s);
+  const ph=ev.flatMap(e=>e.photos.map(p=>({p,e})));
+  $("#report").innerHTML=`
+    <h1>Statement of Facts</h1>
+    <div class="sub">${v.op==="Discharging"?"Discharging":"Loading"} operation · Prepared ${fD(Date.now())} ${fT(Date.now())}${R.example?" · ÖRNEK VERİ":""}</div>
+    <div class="kv">${[["Vessel",ves.name],["IMO / Flag",[ves.imo,ves.flag].filter(Boolean).join(" / ")],["Voyage No",v.voyNo],["Port",v.port],["Berth",v.berth],["Cargo",v.cargo],["B/L Quantity",v.qty?num(+String(v.qty).replace(",","."))+" MT":""],["Operation",v.op],["Master",v.master],["Agent",v.agent],["Charterer",v.charterer],["Period",ev.length?fD(ev[0].t)+" – "+fD(ev[ev.length-1].t):""]].map(([k,x])=>`<div><span>${k}</span>${esc(x)||"&nbsp;"}</div>`).join("")}</div>
+    <h4>Events</h4>
+    <table><thead><tr><th>Date</th><th>Day</th><th>Time</th><th>Event</th><th>Remarks</th></tr></thead><tbody>
+    ${ev.length?ev.map(e=>`<tr><td class="m">${fD(e.t)}</td><td>${DAYS_EN[new Date(e.t).getDay()]}</td><td class="m">${fT(e.t)}</td><td>${esc(e.label)}</td><td>${esc(e.note)}${e.photos.length?` <i>(${e.photos.length} foto)</i>`:""}</td></tr>`).join(""):`<tr><td colspan="5">Kayıt yok</td></tr>`}
+    </tbody></table>
+    <h4>Cargo by Hold (MT)</h4>
+    <table><thead><tr><th>Hold</th><th>Planned</th><th>${v.op==="Discharging"?"Discharged":"Loaded"}</th><th>Remaining</th><th>%</th></tr></thead><tbody>
+    ${s.holds.map(h=>{const d=loadedOf(s,h.id),pl=+h.plan||0;return `<tr><td>${esc(h.name)}</td><td class="n">${num(pl)}</td><td class="n">${num(d)}</td><td class="n">${num(pl-d)}</td><td class="n">${pl?(d/pl*100).toFixed(1):"–"}</td></tr>`}).join("")}
+    <tr><th>Total</th><th style="text-align:right">${num(plan)}</th><th style="text-align:right">${num(done)}</th><th style="text-align:right">${num(plan-done)}</th><th style="text-align:right">${plan?(done/plan*100).toFixed(1):"–"}</th></tr>
+    </tbody></table>
+    ${s.tallies.length?`<h4>Tally</h4><table><thead><tr><th>Item</th>${s.holds.map(h=>`<th>${esc(h.name)}</th>`).join("")}<th>No hold</th><th>Total</th></tr></thead><tbody>
+    ${s.tallies.map(t=>{const nh=s.tallyEntries.filter(x=>x.tallyId===t.id&&!x.holdId).reduce((a,b)=>a+(+b.qty||0),0);const uw=parseFloat(String(t.unitW).replace(",","."));
+      return `<tr><td>${esc(t.name)}${uw?` <i>(≈${num(tallyOf(s,t.id)*uw)} MT)</i>`:""}</td>${s.holds.map(h=>`<td class="n">${num(tallyOf(s,t.id,h.id))}</td>`).join("")}<td class="n">${num(nh)}</td><td class="n"><b>${num(tallyOf(s,t.id))}</b></td></tr>`}).join("")}
+    </tbody></table>`:""}
+    ${(()=>{const ms=memberStats(s),ids=Object.keys(ms);if(!ids.length)return"";
+      return `<h4>Entries by Person</h4><table><thead><tr><th>Name</th><th>Role</th><th>Events</th><th>Hold MT</th>${s.tallies.map(t=>`<th>${esc(t.name)}</th>`).join("")}</tr></thead><tbody>
+      ${ids.map(id=>{const x=ms[id],m=(ves.members||[]).find(y=>y.id===id);return `<tr><td>${esc(m?m.name:(id==="cap"?capName():id?"Silinmiş üye":"Belirtilmemiş"))}</td><td>${esc(m?m.role:"")}</td><td class="n">${x.ev}</td><td class="n">${num(x.mt)}</td>${s.tallies.map(t=>`<td class="n">${num(x.tally[t.id]||0)}</td>`).join("")}</tr>`}).join("")}
+      </tbody></table>`})()}
+    ${ph.length?`<h4>Photographs</h4><div class="photos">${ph.map(({p,e})=>`<figure><img src="${p}" alt=""><figcaption>${fD(e.t)} ${fT(e.t)} — ${esc(e.label)}</figcaption></figure>`).join("")}</div>`:""}
+    <div class="sign"><div>Master</div><div>Agent</div><div>Shipper / Receiver</div></div>`;
+}
+function reportText(s){
+  const v=s.voyage,ves=vesselOf(s),ev=sorted(s);let t=`STATEMENT OF FACTS\nVessel: ${ves.name}${ves.imo?"  IMO: "+ves.imo:""}  Voy: ${v.voyNo}\nPort: ${v.port}  Berth: ${v.berth}\nCargo: ${v.cargo}  Operation: ${v.op}\n\nEVENTS\n`;
+  ev.forEach(e=>t+=`${fD(e.t)} ${DAYS_EN[new Date(e.t).getDay()]} ${fT(e.t)}  ${e.label}${e.note?"  - "+e.note:""}\n`);
+  t+=`\nCARGO BY HOLD (MT)\n`;const T=totals(s);
+  s.holds.forEach(h=>{const d=loadedOf(s,h.id),pl=+h.plan||0;t+=`${h.name}: plan ${num(pl)} / done ${num(d)} / remaining ${num(pl-d)}\n`});
+  t+=`TOTAL: plan ${num(T.p)} / done ${num(T.d)} / remaining ${num(T.p-T.d)}\n`;
+  if(s.tallies.length){t+=`\nTALLY\n`;s.tallies.forEach(x=>t+=`${x.name}: ${num(tallyOf(s,x.id))}\n`)}
+  const ms=memberStats(s);if(Object.keys(ms).length){t+=`\nBY PERSON\n`;Object.entries(ms).forEach(([id,x])=>t+=`${mName(ves,id)}: ${x.ev} events, ${num(x.mt)} MT${s.tallies.map(y=>x.tally[y.id]?`, ${y.name} ${num(x.tally[y.id])}`:"").join("")}\n`)}
+  return t;
+}
+
+/* ---------- crypto (offline SHA-256) ---------- */
+function sha256(str){
+  const rr=(v,a)=>(v>>>a)|(v<<(32-a)),K=[],H=[];
+  const isP=n=>{for(let i=2;i*i<=n;i++)if(n%i===0)return false;return true};
+  for(let n=2,k=0;k<64;n++)if(isP(n)){if(k<8)H[k]=(Math.pow(n,.5)*4294967296)|0;K[k++]=(Math.pow(n,1/3)*4294967296)|0}
+  const b=new TextEncoder().encode(str),l=b.length,bl=((l+9+63)>>6)<<6,m=new Uint8Array(bl);m.set(b);m[l]=0x80;
+  const dv=new DataView(m.buffer);dv.setUint32(bl-4,(l*8)>>>0);dv.setUint32(bl-8,Math.floor(l*8/4294967296));
+  const w=new Array(64);
+  for(let o=0;o<bl;o+=64){
+    for(let i=0;i<16;i++)w[i]=dv.getUint32(o+i*4);
+    for(let i=16;i<64;i++){const a=w[i-15],c=w[i-2];w[i]=(w[i-16]+(rr(a,7)^rr(a,18)^(a>>>3))+w[i-7]+(rr(c,17)^rr(c,19)^(c>>>10)))|0}
+    let [a,bb,c,d,e,f,g,h]=H;
+    for(let i=0;i<64;i++){const t1=(h+(rr(e,6)^rr(e,11)^rr(e,25))+((e&f)^(~e&g))+K[i]+w[i])|0,t2=((rr(a,2)^rr(a,13)^rr(a,22))+((a&bb)^(a&c)^(bb&c)))|0;
+      h=g;g=f;f=e;e=(d+t1)|0;d=c;c=bb;bb=a;a=(t1+t2)|0}
+    H[0]=(H[0]+a)|0;H[1]=(H[1]+bb)|0;H[2]=(H[2]+c)|0;H[3]=(H[3]+d)|0;H[4]=(H[4]+e)|0;H[5]=(H[5]+f)|0;H[6]=(H[6]+g)|0;H[7]=(H[7]+h)|0}
+  return H.map(x=>(x>>>0).toString(16).padStart(8,"0")).join("")}
+function hashPw(pw,salt){let h=salt+":"+pw;for(let i=0;i<1500;i++)h=sha256(h+salt);return h}
+function mkPw(pw){const salt=uid();return{salt,hash:hashPw(pw,salt)}}
+const checkPw=(o,pw)=>!!(o&&o.salt&&hashPw(pw,o.salt)===o.hash);
+
+/* ---------- session ---------- */
+function saveSes(){try{SES?localStorage.setItem("sof-ses",JSON.stringify(SES)):localStorage.removeItem("sof-ses")}catch(e){}}
+function loadSes(){try{const x=JSON.parse(localStorage.getItem("sof-ses")||"null");if(!x||!R.auth)return null;
+  if(x.role==="cap")return x;const m=findMember(x.id);return m&&m.m.pw?x:null}catch(e){return null}}
+function findMember(id){for(const v of R.vessels){const m=(v.members||[]).find(x=>x.id===id);if(m)return{v,m}}return null}
+function enterApp(){$("#login").hidden=true;renderHeader();
+  if(!isCap()){const f=findMember(SES.id);const c=cur();
+    if(f&&(!c||c.vesselId!==f.v.id)){const l=R.sofs.filter(x=>x.vesselId===f.v.id).sort((a,b)=>b.created-a.created)[0];R.cur=l?l.id:null;save()}}
+  renderHeader();go(isCap()?(cur()?"ev":"fleet"):"tally")}
+function logout(){SES=null;saveSes();$("#sheetHost").innerHTML="";renderLogin()}
+
+/* ---------- code transfer (no internet) ---------- */
+const enc=o=>"SOF:"+btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+function dec(t){t=String(t||"").trim();if(t.startsWith("{"))return JSON.parse(t);
+  t=t.replace(/^SOF:/,"").replace(/\s+/g,"");return JSON.parse(decodeURIComponent(escape(atob(t))))}
+function fileImport(ev){const f=ev.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{try{toast(importData(dec(r.result)))}catch(e){toast(e&&e.msg?e.msg:"Bu dosya SOF Defteri’ne ait değil")}};r.readAsText(f);ev.target.value=""}
+function mergeArr(a,b){const ids=new Set(a.map(x=>x.id));let n=0;(b||[]).forEach(x=>{if(!ids.has(x.id)){a.push(x);n++}});return n}
+function importData(o){
+  if(o&&(o.k==="tally"||o.k==="ts")){if(o.k==="tally"){const s0=R.sofs.find(x=>x.id===o.sof);if(s0)mergeArr(s0.tallies,o.tallies)}return importSnapshot(o)}
+  const raw=o&&o.k==="pack"?o.data:o;const d=migrate(raw);if(!d)throw{msg:"Bu kod SOF Defteri’ne ait değil"};
+  const hadAuth=!!R.auth;
+  const trusted=!hadAuth||(d.auth&&d.auth.hash===R.auth.hash);
+  if(!hadAuth&&d.auth)R.auth=d.auth;
+  d.vessels.forEach(x=>{const o2=R.vessels.find(y=>y.id===x.id);
+    if(!o2){R.vessels.push(x);return}
+    (x.members||[]).forEach(m=>{const e=o2.members.find(y=>y.id===m.id);if(!e)o2.members.push(m);else if(trusted)Object.assign(e,m)});
+    if(trusted){o2.name=x.name;o2.holds=x.holds}});
+  d.sofs.forEach(x=>{const o2=R.sofs.find(y=>y.id===x.id);if(!o2)R.sofs.push(x);else{["events","holds","entries","tallies","tallyEntries"].forEach(k=>mergeArr(o2[k],x[k]));if(trusted)Object.assign(o2.voyage,x.voyage)}});
+  if(o.k==="pack"||!cur())R.cur=d.cur||R.cur;R.example=false;save();renderAll();
+  return o.k==="pack"?"Personel paketi yüklendi":"Yedek eklendi"}
+function codeSheet(title,note,code,fname,qrFn){const host=$("#sheetHost");
+  host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="${esc(title)}"><h3>${esc(title)}</h3><p class="note" style="margin:0">${note}</p>
+    <textarea class="copybox" id="cbx" readonly>${esc(code)}</textarea>
+    ${qrFn?`<button class="btn dark" id="cbQ" style="min-height:56px;font-size:16px">QR göster · internetsiz</button>`:""}
+    ${canShare?`<button class="btn pri" id="cbS" style="min-height:52px;font-size:16px">Paylaş · Bluetooth, Quick Share, AirDrop, WhatsApp</button>`:""}
+    <div class="row" style="justify-content:flex-end">${inFrame?"":`<button class="btn ghost" id="cbF">Dosya olarak kaydet</button>`}<button class="btn ghost" id="cbC">Kapat</button><button class="btn ${canShare?"ghost":"pri"}" id="cbK">Kodu kopyala</button></div></div></div>`;
+  if(qrFn)$("#cbQ").onclick=()=>qrSheet(title,qrFn());
+  if(canShare)$("#cbS").onclick=async()=>{try{const file=new File([code],fname,{type:"text/plain"});
+      if(navigator.canShare&&navigator.canShare({files:[file]}))await navigator.share({files:[file],title:title,text:title});
+      else await navigator.share({title:title,text:code})}catch(e){if(e&&e.name!=="AbortError")toast("Paylaşılamadı, kodu kopyalayın")}};
+  $("#cbC").onclick=()=>host.innerHTML="";
+  $("#cbK").onclick=()=>{const fb=()=>{$("#cbx").focus();$("#cbx").select();toast("Kod seçildi, kopyalayın")};
+    try{navigator.clipboard.writeText(code).then(()=>toast("Kod kopyalandı. WhatsApp veya e-postaya yapıştırın."),fb)}catch(e){fb()}};
+  if(!inFrame)$("#cbF").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([code],{type:"text/plain"}));a.download=fname;document.body.appendChild(a);a.click();a.remove()}}
+function sendSheet(){const s=cur();if(!s)return;const mine=s.tallyEntries.filter(x=>x.by===me());
+  codeSheet("Sayımlarımı gönder",`${mine.length} kayıt · toplam ${num(mine.reduce((a,b)=>a+(+b.qty||0),0))} adet. Kodu kopyalayıp kaptana gönderin. Her gönderim tüm sayımlarınızı içerir; kaptanda en son gönderdiğiniz geçerli olur, sayılar ikiye katlanmaz.`,
+    enc({k:"tally",sof:s.id,by:me(),at:Date.now(),tallies:s.tallies,entries:mine}),`tally_${mName(vesselOf(s),me()).replace(/\W+/g,"_")}_${fD(Date.now()).replace(/\./g,"-")}.txt`,()=>staffSnapshot(s))}
+function packSheet(){const s=cur();if(!s)return;const v=vesselOf(s);
+  const noPw=v.members.filter(m=>!m.pw).map(m=>m.name);
+  const sof=JSON.parse(JSON.stringify(s));sof.events.forEach(e=>e.photos=[]);
+  const data={vessels:[v],sofs:[sof],cur:s.id,auth:R.auth?{name:R.auth.name,salt:R.auth.salt,hash:R.auth.hash}:null};
+  codeSheet("Personel paketi",`Personel telefonunda giriş ekranında “QR okut” ile bu ekranı okutun (internetsiz) ya da kodu “Kaptandan gelen kodu yükle”ye yapıştırın.${noPw.length?` <b style="color:var(--warn)">Şifresi olmayan üyeler giriş yapamaz: ${esc(noPw.join(", "))}</b>`:""}`,
+    enc({k:"pack",data}),`paket_${v.name.replace(/\W+/g,"_")}.txt`,()=>packSkeleton(s))}
+function pasteSheet(){const host=$("#sheetHost");
+  host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Kod yükle"><h3>Personel sayımını al</h3>
+    <p class="note" style="margin:0">En kolayı: personel “Sayımlarımı gönder → QR göster”e bassın, siz aşağıdaki “QR okut” ile okutun. Ya da kodu yapıştırın / dosyayı seçin (Bluetooth veya Quick Share ile gelen dosya İndirilenler’dedir).</p>
+    <textarea class="copybox" id="pIn" placeholder="SOF:…"></textarea><p class="err" id="pErr" hidden></p>
+    <div class="row" style="justify-content:space-between"><label class="btn ghost" style="display:inline-flex;align-items:center">Dosya seç<input type="file" id="pF" accept=".txt,.json,text/plain,application/json" hidden></label>
+    <div class="row"><button class="btn ghost" id="pC">Kapat</button><button class="btn pri" id="pGo">Ekle</button></div></div>
+    <button class="btn dark" id="pScan" style="min-height:56px;font-size:16px">QR okut · internetsiz</button></div></div>`;
+  $("#pScan").onclick=()=>scanSheet("Personelin QR kodunu okutun",o=>{try{toast(importData(o))}catch(e){toast(e&&e.msg?e.msg:"Okunan veri eklenemedi")}});
+  $("#pC").onclick=()=>host.innerHTML="";
+  $("#pF").onchange=ev=>{fileImport(ev);host.innerHTML=""};
+  $("#pGo").onclick=()=>{try{const m=importData(dec($("#pIn").value));host.innerHTML="";toast(m)}catch(e){const el=$("#pErr");el.hidden=false;el.textContent=e&&e.msg?e.msg:"Kod okunamadı. Tamamını kopyaladığınızdan emin olun."}}}
+
+/* ---------- QR encoder (byte mode, EC L/M) ---------- */
+const QRGEN=(()=>{
+  const ECC={L:[-1,7,10,15,20,26,18,20,24,30,18,20,24,26,30,22,24,28,30,28,28,28,28,30,30,26,28,30,30,30,30,30,30,30,30,30,30,30,30,30,30],
+             M:[-1,10,16,26,18,24,16,18,22,22,26,30,22,22,24,24,28,28,26,26,26,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28]};
+  const BLK={L:[-1,1,1,1,1,1,2,2,2,2,4,4,4,4,4,6,6,6,6,7,8,8,9,9,10,12,12,12,13,14,15,16,17,18,19,19,20,21,22,24,25],
+             M:[-1,1,1,1,2,2,4,4,4,5,5,5,8,9,9,10,10,11,13,14,16,17,17,18,20,21,23,25,26,28,29,31,33,35,37,38,40,43,45,47,49]};
+  const FMT={L:1,M:0};
+  const raw=v=>{let r=(16*v+128)*v+64;if(v>=2){const n=Math.floor(v/7)+2;r-=(25*n-10)*n-55;if(v>=7)r-=36}return r};
+  const dataCw=(v,e)=>Math.floor(raw(v)/8)-ECC[e][v]*BLK[e][v];
+  const mul=(x,y)=>{let z=0;for(let i=7;i>=0;i--){z=(z<<1)^((z>>>7)*0x11D);z^=((y>>>i)&1)*x}return z&255};
+  function rsDiv(d){const r=new Array(d).fill(0);r[d-1]=1;let root=1;for(let i=0;i<d;i++){for(let j=0;j<r.length;j++){r[j]=mul(r[j],root);if(j+1<r.length)r[j]^=r[j+1]}root=mul(root,2)}return r}
+  function rsRem(data,div){const r=div.map(()=>0);for(const b of data){const f=b^r.shift();r.push(0);div.forEach((c,i)=>r[i]^=mul(c,f))}return r}
+  function alignPos(v){if(v===1)return[];const n=Math.floor(v/7)+2,size=v*4+17;const step=v===32?26:Math.ceil((v*4+4)/(n*2-2))*2;const r=[6];for(let p=size-7;r.length<n;p-=step)r.splice(1,0,p);return r}
+  function encode(text,ecl){
+    ecl=ecl||"L";const bytes=Array.from(new TextEncoder().encode(text));
+    let ver=0;for(let v=1;v<=40;v++){const cc=v<=9?8:16;if(4+cc+bytes.length*8<=dataCw(v,ecl)*8){ver=v;break}}
+    if(!ver)throw new Error("QR için veri çok büyük");
+    const bits=[];const put=(val,len)=>{for(let i=len-1;i>=0;i--)bits.push((val>>>i)&1)};
+    put(4,4);put(bytes.length,ver<=9?8:16);bytes.forEach(b=>put(b,8));
+    const cap=dataCw(ver,ecl)*8;put(0,Math.min(4,cap-bits.length));put(0,(8-bits.length%8)%8);
+    for(let p=0xEC;bits.length<cap;p^=0xEC^0x11)put(p,8);
+    const data=[];for(let i=0;i<bits.length;i+=8){let b=0;for(let j=0;j<8;j++)b=(b<<1)|bits[i+j];data.push(b)}
+    // ecc + interleave
+    const nb=BLK[ecl][ver],el=ECC[ecl][ver],rc=Math.floor(raw(ver)/8),ns=nb-rc%nb,sl=Math.floor(rc/nb),div=rsDiv(el);
+    const blocks=[];for(let i=0,k=0;i<nb;i++){const len=sl-el+(i<ns?0:1);const d=data.slice(k,k+len);k+=len;const e=rsRem(d,div);if(i<ns)d.push(0);blocks.push(d.concat(e))}
+    const all=[];for(let i=0;i<blocks[0].length;i++)for(let j=0;j<blocks.length;j++)if(i!==sl-el||j>=ns)all.push(blocks[j][i]);
+    // matrix
+    const size=ver*4+17,M=[],F=[];for(let y=0;y<size;y++){M.push(new Array(size).fill(0));F.push(new Array(size).fill(false))}
+    const setF=(x,y,d)=>{M[y][x]=d?1:0;F[y][x]=true};
+    for(let i=0;i<size;i++){setF(6,i,i%2===0);setF(i,6,i%2===0)}
+    const finder=(x,y)=>{for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){const d=Math.max(Math.abs(dx),Math.abs(dy)),xx=x+dx,yy=y+dy;if(xx>=0&&xx<size&&yy>=0&&yy<size)setF(xx,yy,d!==2&&d!==4)}};
+    finder(3,3);finder(size-4,3);finder(3,size-4);
+    const ap=alignPos(ver),na=ap.length;
+    for(let i=0;i<na;i++)for(let j=0;j<na;j++){if((i===0&&j===0)||(i===0&&j===na-1)||(i===na-1&&j===0))continue;
+      for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)setF(ap[i]+dx,ap[j]+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1)}
+    const drawFormat=mask=>{const d=(FMT[ecl]<<3)|mask;let r=d;for(let i=0;i<10;i++)r=(r<<1)^((r>>>9)*0x537);const b=((d<<10)|r)^0x5412,g=i=>((b>>>i)&1)===1;
+      for(let i=0;i<=5;i++)setF(8,i,g(i));setF(8,7,g(6));setF(8,8,g(7));setF(7,8,g(8));for(let i=9;i<15;i++)setF(14-i,8,g(i));
+      for(let i=0;i<8;i++)setF(size-1-i,8,g(i));for(let i=8;i<15;i++)setF(8,size-15+i,g(i));setF(8,size-8,true)};
+    drawFormat(0);
+    if(ver>=7){let r=ver;for(let i=0;i<12;i++)r=(r<<1)^((r>>>11)*0x1F25);const b=(ver<<12)|r;
+      for(let i=0;i<18;i++){const bit=((b>>>i)&1)===1,a=size-11+i%3,c=Math.floor(i/3);setF(a,c,bit);setF(c,a,bit)}}
+    let i=0;for(let right=size-1;right>=1;right-=2){if(right===6)right=5;
+      for(let vert=0;vert<size;vert++)for(let j=0;j<2;j++){const x=right-j,up=((right+1)&2)===0,y=up?size-1-vert:vert;
+        if(!F[y][x]&&i<all.length*8){M[y][x]=(all[i>>>3]>>>(7-(i&7)))&1;i++}}}
+    const maskFn=[(x,y)=>(x+y)%2===0,(x,y)=>y%2===0,(x,y)=>x%3===0,(x,y)=>(x+y)%3===0,(x,y)=>(Math.floor(x/3)+Math.floor(y/2))%2===0,
+      (x,y)=>x*y%2+x*y%3===0,(x,y)=>(x*y%2+x*y%3)%2===0,(x,y)=>((x+y)%2+x*y%3)%2===0];
+    const apply=m=>{for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(!F[y][x]&&maskFn[m](x,y))M[y][x]^=1};
+    const penalty=()=>{let p=0,dark=0;
+      for(let a=0;a<2;a++)for(let u=0;u<size;u++){let run=1;for(let v=1;v<=size;v++){const cur=v<size?(a?M[v][u]:M[u][v]):-1,prev=a?M[v-1][u]:M[u][v-1];
+        if(cur===prev)run++;else{if(run>=5)p+=run-2;run=1}}}
+      for(let y=0;y<size-1;y++)for(let x=0;x<size-1;x++){const c=M[y][x];if(c===M[y][x+1]&&c===M[y+1][x]&&c===M[y+1][x+1])p+=3}
+      for(let y=0;y<size;y++)for(let x=0;x<size;x++)dark+=M[y][x];
+      p+=Math.floor(Math.abs(dark*20-size*size*10)/(size*size))*10;return p};
+    let best=0,bp=Infinity;for(let m=0;m<8;m++){apply(m);drawFormat(m);const p=penalty();if(p<bp){bp=p;best=m}apply(m)}
+    apply(best);drawFormat(best);
+    return{size,modules:M,version:ver};
+  }
+  function draw(canvas,text,ecl){const q=encode(text,ecl),border=4,n=q.size+border*2;
+    const px=Math.max(2,Math.floor(Math.min(canvas.width,canvas.height)/n)),dim=n*px;canvas.width=canvas.height=dim;
+    const g=canvas.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,dim,dim);g.fillStyle="#000";
+    for(let y=0;y<q.size;y++)for(let x=0;x<q.size;x++)if(q.modules[y][x])g.fillRect((x+border)*px,(y+border)*px,px,px);return q}
+  return{encode,draw};
+})();
+/* ---------- offline transfer: QR show / scan ---------- */
+const JSQR_URL="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
+const b64=u8=>{let s="";for(let i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s)};
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function zpack(obj){const json=JSON.stringify(obj);
+  try{if(window.CompressionStream){const st=new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"));return "Z"+b64(new Uint8Array(await new Response(st).arrayBuffer()))}}catch(e){}
+  return "J"+b64(new TextEncoder().encode(json))}
+async function zunpack(s){const k=s[0],u=unb64(s.slice(1));
+  if(k==="Z"){const st=new Blob([u]).stream().pipeThrough(new DecompressionStream("deflate-raw"));return JSON.parse(await new Response(st).text())}
+  return JSON.parse(new TextDecoder().decode(u))}
+// compact payloads for QR
+function staffSnapshot(s){const by=me(),ti=s.tallies.map(t=>t.id),hi=s.holds.map(h=>h.id);
+  const mine=s.tallyEntries.filter(x=>x.by===by);const t0=mine.length?Math.floor(Math.min(...mine.map(x=>x.t))/60000):0;
+  return{k:"ts",sof:s.id,by,at:Date.now(),ti,tn:s.tallies.map(t=>t.name),hi,t0,
+    e:mine.map(x=>[ti.indexOf(x.tallyId),x.holdId?hi.indexOf(x.holdId):-1,+x.qty,Math.floor(x.t/60000)-t0])}}
+function packSkeleton(s){const v=vesselOf(s);const a=R.auth?{name:R.auth.name,salt:R.auth.salt,hash:R.auth.hash}:null;
+  return{k:"pack",data:{auth:a,cur:s.id,
+    vessels:[{id:v.id,name:v.name,imo:v.imo,flag:v.flag,holds:v.holds,members:v.members.map(m=>({id:m.id,name:m.name,role:m.role,pw:m.pw}))}],
+    sofs:[{id:s.id,vesselId:s.vesselId,created:s.created,voyage:{port:s.voyage.port,cargo:s.voyage.cargo,op:s.voyage.op,voyNo:s.voyage.voyNo},
+      holds:s.holds,tallies:s.tallies,events:[],entries:[],tallyEntries:[]}]}}}
+const QCHUNK=480;
+async function qrSheet(title,obj){const host=$("#sheetHost");
+  let parts=[];try{const p=await zpack(obj);const gid=Math.random().toString(36).slice(2,6);const n=Math.ceil(p.length/QCHUNK);
+    for(let i=0;i<n;i++)parts.push(`DGQ1|${gid}|${i+1}|${n}|`+p.slice(i*QCHUNK,(i+1)*QCHUNK))}catch(e){toast("QR hazırlanamadı");return}
+  let idx=0,auto=parts.length>1,timer=null;
+  host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="QR"><h3>${esc(title)}</h3>
+    <p class="note" style="margin:0">Karşı telefonda <b>“QR okut”</b>a basıp kamerayı bu ekrana tutun. İnternet gerekmez.${parts.length>1?` Kodlar sırayla değişir; okuyan telefon hepsini toplar.`:""}</p>
+    <div style="background:#fff;border-radius:12px;padding:10px;display:flex;justify-content:center"><canvas id="qrC" width="720" height="720" style="width:min(100%,360px);height:auto;image-rendering:pixelated"></canvas></div>
+    <div class="row" style="justify-content:center;gap:12px">${parts.length>1?`<button class="btn ghost" id="qrP" aria-label="Önceki">‹</button><b class="mono" id="qrN"></b><button class="btn ghost" id="qrX" aria-label="Sonraki">›</button><button class="btn ghost sm" id="qrA"></button>`:""}</div>
+    <div class="row" style="justify-content:flex-end"><button class="btn pri" id="qrClose">Kapat</button></div></div></div>`;
+  let wake=null;try{wake=await navigator.wakeLock.request("screen")}catch(e){}
+  const show=()=>{QRGEN.draw($("#qrC"),parts[idx],"L");const n=$("#qrN");if(n)n.textContent=`${idx+1} / ${parts.length}`;const a=$("#qrA");if(a)a.textContent=auto?"Durdur":"Otomatik"};
+  const tick=()=>{clearInterval(timer);if(auto)timer=setInterval(()=>{if(!$("#qrC")){clearInterval(timer);return}idx=(idx+1)%parts.length;show()},1100)};
+  show();tick();
+  if(parts.length>1){$("#qrP").onclick=()=>{auto=false;tick();idx=(idx-1+parts.length)%parts.length;show()};$("#qrX").onclick=()=>{auto=false;tick();idx=(idx+1)%parts.length;show()};$("#qrA").onclick=()=>{auto=!auto;tick();show()}}
+  $("#qrClose").onclick=()=>{clearInterval(timer);try{wake&&wake.release()}catch(e){}host.innerHTML=""}}
+function loadJsQR(){return new Promise(res=>{if(window.jsQR)return res(true);const sc=document.createElement("script");sc.src=JSQR_URL;sc.onload=()=>res(!!window.jsQR);sc.onerror=()=>res(false);document.head.appendChild(sc)})}
+// onDone(obj) receives the decoded payload
+async function scanSheet(title,onDone){const host=$("#sheetHost");
+  host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="QR okut"><h3>${esc(title)}</h3>
+    <div style="position:relative;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:1;max-width:100%"><video id="scV" playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
+      <div style="position:absolute;inset:12%;border:3px solid var(--accent);border-radius:12px;pointer-events:none"></div></div>
+    <p class="note" id="scS" style="margin:0">Kamera açılıyor…</p><p class="err" id="scE" hidden></p>
+    <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="scC">Vazgeç</button></div></div></div>`;
+  let stream=null,stop=false;const parts={};let need=0,gid=null;
+  const end=()=>{stop=true;try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}};
+  $("#scC").onclick=()=>{end();host.innerHTML=""};
+  const fail=m=>{const e=$("#scE");if(e){e.hidden=false;e.textContent=m}$("#scS").hidden=true};
+  if(inFrame)return fail("Kamera bu önizleme penceresinde kapalı. Kurulu uygulamada (ana ekrandaki DG ikonu) çalışır.");
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return fail("Bu tarayıcı kameraya erişemiyor. Uygulamayı kurup oradan açın.");
+  let detector=null;try{if("BarcodeDetector" in window){const f=await BarcodeDetector.getSupportedFormats();if(f.includes("qr_code"))detector=new BarcodeDetector({formats:["qr_code"]})}}catch(e){}
+  if(!detector&&!(await loadJsQR()))return fail("QR okuyucu yüklenemedi. Uygulamayı bir kez internetteyken açın; sonra internetsiz de çalışır.");
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280},height:{ideal:1280}},audio:false})}
+  catch(e){return fail("Kamera izni verilmedi. Telefon ayarlarından bu uygulamaya kamera izni verin.")}
+  const v=$("#scV");v.srcObject=stream;try{await v.play()}catch(e){}
+  $("#scS").textContent="QR kodu çerçeveye getirin…";
+  const cv=document.createElement("canvas"),g=cv.getContext("2d",{willReadFrequently:true});
+  const handle=async txt=>{if(!txt)return;
+    if(!txt.startsWith("DGQ1|")){$("#scS").textContent="Bu QR SOF Defteri’ne ait değil";return}
+    const [, g2, i, n]=txt.split("|",4);const body=txt.slice(["DGQ1",g2,i,n].join("|").length+1);
+    if(gid!==g2){gid=g2;need=+n;for(const k in parts)delete parts[k]}
+    parts[+i]=body;const got=Object.keys(parts).length;
+    if(navigator.vibrate&&got)try{navigator.vibrate(15)}catch(e){}
+    $("#scS").textContent=need>1?`Okunan: ${got} / ${need}`:"Okundu";
+    if(got===need){end();let obj;try{let s="";for(let k=1;k<=need;k++)s+=parts[k];obj=await zunpack(s)}catch(e){host.innerHTML="";toast("QR çözülemedi, tekrar deneyin");return}
+      host.innerHTML="";onDone(obj)}};
+  const loop=async()=>{if(stop||!$("#scV"))return end();
+    try{if(v.readyState>=2){
+      if(detector){const r=await detector.detect(v);for(const c of r)await handle(c.rawValue)}
+      else{const w=v.videoWidth,h=v.videoHeight,sz=Math.min(w,h,900),sx=(w-Math.min(w,h))/2,sy=(h-Math.min(w,h))/2;cv.width=cv.height=sz;
+        g.drawImage(v,sx,sy,Math.min(w,h),Math.min(w,h),0,0,sz,sz);const r=window.jsQR(g.getImageData(0,0,sz,sz).data,sz,sz,{inversionAttempts:"dontInvert"});if(r)await handle(r.data)}}}catch(e){}
+    setTimeout(loop,120)};
+  loop()}
+function importSnapshot(o){const s=R.sofs.find(x=>x.id===o.sof);if(!s)throw{msg:"Bu sayımın ait olduğu SOF bu telefonda yok. Önce personel paketini o telefona yükleyin."};
+  s.sync=s.sync||{};if(s.sync[o.by]&&o.at<s.sync[o.by])throw{msg:"Bu sayım daha önce alınandan eski, atlandı."};
+  (o.ti||[]).forEach((id,i)=>{if(!s.tallies.some(t=>t.id===id))s.tallies.push({id,name:(o.tn||[])[i]||"Sayaç",unitW:""})});
+  const ents=o.k==="ts"?o.e.map(([a,b,q,d],i)=>({id:"s"+o.by+"_"+o.at+"_"+i,tallyId:o.ti[a],holdId:b>=0?o.hi[b]:null,qty:q,t:(o.t0+d)*60000,by:o.by})):(o.entries||[]);
+  s.tallyEntries=s.tallyEntries.filter(x=>x.by!==o.by).concat(ents);s.sync[o.by]=o.at||Date.now();save();renderAll();
+  return `${esc(mName(vesselOf(s),o.by))}: ${ents.length} kayıt, ${num(ents.reduce((a,b)=>a+(+b.qty||0),0))} adet alındı`}
+
+/* ---------- account ---------- */
+function accountSheet(){const host=$("#sheetHost");const cap=isCap();
+  host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Hesap"><h3>${esc(mName(vesselOf(cur())||{members:[]},me()))}</h3>
+    <p class="note" style="margin:0">${cap?"Kaptan · tüm bölümlere erişim":"Personel · yalnızca Tally"}</p>
+    ${cap?`<div class="lcard" style="box-shadow:none;padding:0"><h3 style="font-size:16px">Kaptan şifresini değiştir</h3>
+      <input type="password" id="aO" class="pwin" placeholder="Mevcut şifre" autocomplete="current-password"><input type="password" id="aN" class="pwin" placeholder="Yeni şifre (en az 4)" autocomplete="new-password">
+      <p class="err" id="aE" hidden></p><button class="btn ghost" id="aS" style="align-self:flex-start">Şifreyi değiştir</button></div>`:`<button class="btn dark" id="aSend">Sayımlarımı gönder</button>`}
+    <div class="row" style="justify-content:space-between"><button class="btn ghost" id="aC">Kapat</button><button class="btn danger" id="aOut">Çıkış yap</button></div></div></div>`;
+  $("#aC").onclick=()=>host.innerHTML="";$("#aOut").onclick=logout;
+  if(!cap)$("#aSend").onclick=sendSheet;
+  else $("#aS").onclick=()=>{const e=$("#aE");if(!checkPw(R.auth,$("#aO").value)){e.hidden=false;e.textContent="Mevcut şifre yanlış";return}
+    if($("#aN").value.length<4){e.hidden=false;e.textContent="Yeni şifre en az 4 karakter olmalı";return}
+    Object.assign(R.auth,mkPw($("#aN").value));save();host.innerHTML="";toast("Kaptan şifresi değiştirildi")}}
+
+/* ---------- installable app ---------- */
+const LOGO="data:image/png;base64,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";
+const canShare=!inFrame&&!!navigator.share;
+const standalone=(()=>{try{return matchMedia("(display-mode: standalone)").matches||navigator.standalone===true}catch(e){return false}})();
+const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+let deferredInstall=null;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstall=e;if(!$("#login").hidden)renderLogin()});
+window.addEventListener("appinstalled",()=>{deferredInstall=null;toast("Uygulama kuruldu");if(!$("#login").hidden)renderLogin()});
+if(!inFrame&&"serviceWorker" in navigator&&/^https?:$/.test(location.protocol)){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}))}
+if(!inFrame&&navigator.storage&&navigator.storage.persist){try{navigator.storage.persist()}catch(e){}}
+function installCard(){if(inFrame||standalone)return"";
+  if(deferredInstall)return `<div class="install"><img src="${LOGO}" alt=""><div><b>Uygulamayı kur</b><br><span style="opacity:.8">Ana ekrana ikon olarak eklenir, internetsiz açılır.</span></div><button class="btn pri" id="instBtn">Kur</button></div>`;
+  if(isIOS&&/^https:$/.test(location.protocol))return `<div class="install"><img src="${LOGO}" alt=""><div><b>iPhone’a kurmak için</b><br><span style="opacity:.85">Safari’de alttaki Paylaş düğmesine (□↑), sonra “Ana Ekrana Ekle”ye dokunun.</span></div></div>`;
+  return ""}
+function wireInstall(){const b=$("#instBtn");if(b)b.onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();try{await deferredInstall.userChoice}catch(e){}deferredInstall=null;renderLogin()}}
+
+/* ---------- login screen ---------- */
+let LV="login",REC=null;
+function renderLogin(){const L=$("#login");L.hidden=false;
+  const head=`<div class="logo"><img src="${LOGO}" alt="">DG SOF Defteri<small>${R.auth?"Giriş yapın":"İlk kurulum"}</small></div>`;
+  const loadCard=open=>`<details class="lcard"${open?" open":""}><summary style="cursor:pointer;font-weight:600">Kaptandan gelen kodu yükle</summary>
+    <p class="note" style="margin:0">Personel telefonu için: kaptanın gönderdiği paketi yapıştırın veya dosyayı seçin.</p>
+    <textarea class="copybox" id="lIn" placeholder="SOF:…" style="height:110px"></textarea><p class="err" id="lInE" hidden></p>
+    <div class="row" style="justify-content:space-between"><label class="btn ghost" style="display:inline-flex;align-items:center">Dosya seç<input type="file" id="lF" accept=".txt,.json,text/plain,application/json" hidden></label><button class="btn dark" id="lLoad">Yükle</button></div></details>`;
+  const scanCard=`<button class="btn dark" id="lScan" style="min-height:56px;font-size:16px">QR okut · kaptandan paket al</button>`;
+  let body="";
+  if(LV==="rec"&&REC){body=`<div class="lcard"><h3>Kurtarma kodunuz</h3><div class="rcode">${REC}</div>
+    <p class="note" style="margin:0">Kaptan şifresini unutursanız bu kodla yenileyebilirsiniz. Bir yere yazın; bir daha gösterilmeyecek.</p><button class="btn pri" id="lRecOk">Yazdım, devam et</button></div>`}
+  else if(!R.auth){body=`<div class="lcard"><h3>Kaptan hesabı oluştur</h3>
+      <label class="field">Adınız<input id="sN" placeholder="Örn. Kpt. A. Yılmaz" autocomplete="name"></label>
+      <label class="field">Şifre<input id="sP1" type="password" autocomplete="new-password"></label>
+      <label class="field">Şifre (tekrar)<input id="sP2" type="password" autocomplete="new-password"></label>
+      <p class="err" id="sE" hidden></p><button class="btn pri" id="sGo">Kur ve giriş yap</button>
+      <p class="note" style="margin:0">Kaptan tüm bölümlere erişir. Personel, sizin belirlediğiniz şifreyle yalnızca Tally’ye girer.</p></div>
+      <div class="lcard"><h3>Personel misiniz?</h3><p class="note" style="margin:0">Kaptan telefonunda Rapor → “Personel paketi hazırla → QR göster”i açtırın ve okutun.</p>${scanCard}</div>${loadCard(false)}`}
+  else if(LV==="forgot"){body=`<div class="lcard"><h3>Kaptan şifresini yenile</h3>
+      <label class="field">Kurtarma kodu<input id="fC" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX"></label>
+      <label class="field">Yeni şifre<input id="fP" type="password" autocomplete="new-password"></label>
+      <p class="err" id="fE" hidden></p><button class="btn pri" id="fGo">Şifreyi yenile</button><button class="lk" id="fBack">Girişe dön</button></div>`}
+  else{const c=cur(),vs=c?[vesselOf(c)]:R.vessels;
+    const users=[{id:"cap",name:capName(),sub:"Kaptan"}];
+    vs.forEach(v=>(v.members||[]).filter(m=>m.pw).forEach(m=>users.push({id:m.id,name:m.name,sub:[m.role,vs.length>1?v.name:""].filter(Boolean).join(" · ")})));
+    body=`<div class="lcard"><h3>Kim giriyor?</h3><div class="pick" id="lU">${users.map((u,i)=>`<button data-u="${u.id}" class="${i===0&&users.length===1?"on":""}">${esc(u.name)}<span>${esc(u.sub||"")}</span></button>`).join("")}</div>
+      <label class="field">Şifre<input id="lP" type="password" autocomplete="current-password"></label>
+      <p class="err" id="lE" hidden></p><button class="btn pri" id="lGo">Giriş</button>
+      ${users.length===1?`<p class="note" style="margin:0">Personel listede yoksa: kaptan “Gemiler → Üyeler”den şifre belirlemeli ve bu telefona paket yüklemeli.</p>`:""}
+      <button class="lk" id="lForgot">Kaptan şifremi unuttum</button></div>${scanCard}${loadCard(false)}`}
+  L.innerHTML=`<div class="box">${head}${installCard()}${body}</div>`;wireInstall();
+  // wire
+  const lin=$("#lLoad");if(lin){
+    $("#lF").onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$("#lIn").value=r.result;$("#lLoad").click()};r.readAsText(f);ev.target.value=""};
+    lin.onclick=()=>{const e=$("#lInE");try{const o=dec($("#lIn").value);if(o.k==="tally")throw{msg:"Bu bir personel sayımı. Kaptan telefonunda Rapor → “Personel sayımını al” ile yükleyin."};
+      const m=importData(o);LV="login";renderLogin();toast(m+". Şimdi adınızı seçip şifrenizle girin.")}catch(x){e.hidden=false;e.textContent=x&&x.msg?x.msg:"Kod okunamadı. Tamamını kopyaladığınızdan emin olun."}}}
+  if($("#lScan"))$("#lScan").onclick=()=>scanSheet("Kaptanın QR kodunu okutun",o=>{try{if(o.k!=="pack")throw{msg:"Bu bir personel sayımı. Kaptan telefonunda Rapor → “Personel sayımını al” ile okutun."};
+    const m=importData(o);LV="login";renderLogin();toast(m+". Şimdi adınızı seçip şifrenizle girin.")}catch(e){toast(e&&e.msg?e.msg:"Okunan veri yüklenemedi")}});
+  if($("#lRecOk"))$("#lRecOk").onclick=()=>{REC=null;LV="login";SES={role:"cap"};saveSes();enterApp()};
+  if($("#sGo"))$("#sGo").onclick=()=>{const e=$("#sE"),p1=$("#sP1").value,p2=$("#sP2").value;
+    if(p1.length<4){e.hidden=false;e.textContent="Şifre en az 4 karakter olmalı";return}
+    if(p1!==p2){e.hidden=false;e.textContent="Şifreler aynı değil";return}
+    const code=Array.from({length:3},()=>Math.random().toString(36).slice(2,6).toUpperCase().padEnd(4,"X")).join("-");
+    R.auth=Object.assign({name:$("#sN").value.trim()||"Kaptan"},mkPw(p1),{rec:mkPw(code)});save();REC=code;LV="rec";renderLogin()};
+  if($("#lU")){let sel=$("#lU .on")?"cap":null;
+    $$("#lU [data-u]").forEach(b=>b.onclick=()=>{sel=b.dataset.u;$$("#lU [data-u]").forEach(x=>x.classList.toggle("on",x===b));$("#lP").focus()});
+    const tryIn=()=>{const e=$("#lE"),pw=$("#lP").value;if(!sel){e.hidden=false;e.textContent="Önce adınızı seçin";return}
+      if(sel==="cap"?checkPw(R.auth,pw):checkPw((findMember(sel)||{}).m&&findMember(sel).m.pw,pw)){SES=sel==="cap"?{role:"cap"}:{role:"staff",id:sel};saveSes();enterApp()}
+      else{e.hidden=false;e.textContent="Şifre yanlış";$("#lP").select()}};
+    $("#lGo").onclick=tryIn;$("#lP").onkeydown=ev=>{if(ev.key==="Enter")tryIn()};
+    $("#lForgot").onclick=()=>{LV="forgot";renderLogin()}}
+  if($("#fGo")){$("#fBack").onclick=()=>{LV="login";renderLogin()};
+    $("#fGo").onclick=()=>{const e=$("#fE"),c=$("#fC").value.trim().toUpperCase();
+      if(!R.auth.rec||!checkPw(R.auth.rec,c)){e.hidden=false;e.textContent="Kurtarma kodu yanlış";return}
+      if($("#fP").value.length<4){e.hidden=false;e.textContent="Yeni şifre en az 4 karakter olmalı";return}
+      Object.assign(R.auth,mkPw($("#fP").value));save();LV="login";SES={role:"cap"};saveSes();toast("Şifre yenilendi");enterApp()}}
+}
+
+/* ---------- render ---------- */
+function renderTab(){({fleet:renderFleet,ev:renderTaps,log:renderLog,tally:renderTally,hold:renderHolds,rep:renderRep})[TAB]()}
+function renderAll(){renderHeader();renderTab()}
+
+/* ---------- boot ---------- */
+openDB().then(load).then(d=>{const m=migrate(d);R=m||sample();if(!m)save();SES=loadSes();if(SES)enterApp();else renderLogin()});
+})();
+</script>
+
+</body>
+</html>
