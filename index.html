@@ -1244,7 +1244,9 @@ const online=()=>!!(SES&&SES.online&&FB);
 function fbWait(ms){return new Promise(res=>{if(window.FBX)return res(true);if(window.FBX_ERR)return res(false);
   const t=setTimeout(()=>res(false),ms);window.addEventListener("fbx-ready",()=>{clearTimeout(t);res(true)},{once:true});window.addEventListener("fbx-fail",()=>{clearTimeout(t);res(false)},{once:true})})}
 function fbInit(){if(FB||!window.FBX)return FB;const {a,au,fs}=window.FBX;const app=a.initializeApp(FBCONF);let fdb;
-  try{fdb=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentSingleTabManager({})})})}catch(e){try{fdb=fs.initializeFirestore(app,{localCache:fs.memoryLocalCache()})}catch(x){fdb=fs.getFirestore(app)}}
+  // memory cache only: the app keeps its own durable copy, and Firestore's IndexedDB cache caused "Unexpected state" errors on phones
+  try{fdb=fs.initializeFirestore(app,{localCache:fs.memoryLocalCache()})}catch(e){fdb=fs.getFirestore(app)}
+  try{indexedDB.databases&&indexedDB.databases().then(l=>l.forEach(d=>{if(d.name&&d.name.startsWith("firestore/"))indexedDB.deleteDatabase(d.name)}))}catch(e){}
   FB={a,au,fs,app,auth:au.getAuth(app),db:fdb};return FB}
 const toEmail=u=>{u=String(u||"").trim();return u.includes("@")?u:u.toLowerCase().replace(/\s+/g,"")+"@"+USERDOM};
 function authMsg(e){const c=(e&&e.code)||"";return({"auth/invalid-credential":"Kullanıcı adı / e-posta veya şifre yanlış","auth/wrong-password":"Şifre yanlış","auth/user-not-found":"Bu kullanıcı bulunamadı",
@@ -1299,7 +1301,7 @@ async function repairSync(){const b=$$("[data-syncnow]");b.forEach(x=>{x.disable
   const S=SYN();R.sync={migrated:S.migrated,vh:{},sof:{},ev:{},te:{},seen:S.seen||{}};
   const v=JSON.parse(JSON.stringify(R));
   await new Promise(res=>{try{const t=db.transaction(ST,"readwrite");t.objectStore(ST).put(v,"state");t.oncomplete=res;t.onerror=res}catch(e){try{localStorage.setItem("sof-state",JSON.stringify(v))}catch(x){}res()}});
-  try{stopSync();await FB.fs.terminate(FB.db);await FB.fs.clearIndexedDbPersistence(FB.db)}catch(e){}
+  try{stopSync();await FB.fs.terminate(FB.db)}catch(e){}
   try{indexedDB.deleteDatabase("firestore/[DEFAULT]/"+FBCONF.projectId+"/main")}catch(e){}
   location.reload()}
 window.addEventListener("unhandledrejection",ev=>{const m=String((ev.reason&&ev.reason.message)||ev.reason||"");if(/INTERNAL ASSERTION/i.test(m)&&online())syncErr(ev.reason)});
@@ -1370,36 +1372,40 @@ async function staffFetchOwn(sid){if(!online())return;const {fs}=FB;const S=SYN(
 
 /* ---- push (batched) ---- */
 function schedulePush(ms){if(!online())return;if(ms==null&&SY.pushT){updateSyncUI();return}clearTimeout(SY.pushT);SY.pushT=setTimeout(()=>{SY.pushT=null;pushNow()},ms==null?(isCap()?8000:15000):ms);updateSyncUI()}
-async function pushNow(){if(!online()||SY.pushing)return;if(isCap()&&!SYN().migrated)return;SY.pushing=true;const {fs}=FB;const S=SYN();const ops=[],revert=[];
+async function pushNow(){if(!online()||SY.pushing)return;if(isCap()&&!SYN().migrated)return;SY.pushing=true;const {fs}=FB;const S=SYN();const ops=[],marks=[];
+  // marks are applied only after the server confirms the write, so nothing is lost if the app closes while offline
   try{
     const mine=x=>isCap()||x.by===me();
     if(isCap()){
       const vids=new Set(R.vessels.map(v=>v.id));const vPend=R.vessels.some(v=>S.vh[v.id]!==hsh(vPay(v)))||Object.keys(S.vh).some(id=>!vids.has(id));
-      if(vPend){const data={list:R.vessels.map(vPay)};ops.push({t:"set",ref:fpath("state","vessels"),data});const old=Object.assign({},S.vh);revert.push(()=>S.vh=old);
-        S.vh={};R.vessels.forEach(v=>S.vh[v.id]=hsh(vPay(v)))}
-      R.sofs.forEach(s=>{const h=hsh(metaOf(s));if(S.sof[s.id]!==h){ops.push({t:"set",ref:fpath("sofs",s.id),data:metaOf(s)});const o=S.sof[s.id];revert.push(()=>S.sof[s.id]=o);S.sof[s.id]=h}});
-      const sids=new Set(R.sofs.map(s=>s.id));Object.keys(S.sof).forEach(id=>{if(!sids.has(id)){ops.push({t:"del",ref:fpath("sofs",id)});delete S.sof[id]}});
+      if(vPend){const snap=R.vessels.map(v=>[v.id,hsh(vPay(v))]);ops.push({t:"set",ref:fpath("state","vessels"),data:{list:R.vessels.map(vPay)}});
+        marks.push(()=>{S.vh={};snap.forEach(([id,h])=>S.vh[id]=h)})}
+      R.sofs.forEach(s=>{const h=hsh(metaOf(s));if(S.sof[s.id]!==h){ops.push({t:"set",ref:fpath("sofs",s.id),data:metaOf(s)});marks.push(()=>S.sof[s.id]=h)}});
+      const sids=new Set(R.sofs.map(s=>s.id));Object.keys(S.sof).forEach(id=>{if(!sids.has(id)){ops.push({t:"del",ref:fpath("sofs",id)});marks.push(()=>delete S.sof[id])}});
     }
     R.sofs.forEach(s=>{if(!isCap()&&!S.seen[s.id])return;
       const syn=S.ev[s.id]||(S.ev[s.id]={});
       s.events.forEach(e=>{if(!mine(e))return;if(isCap()&&!e.by)e.by="cap";const h=evHash(e);
-        if(syn[e.id]!==h){ops.push({t:"set",ref:fpath("sofs",s.id,"events",e.id),data:evPay(e)});const o=syn[e.id];revert.push(()=>syn[e.id]=o);syn[e.id]=h}});
-      const eids=new Set(s.events.map(e=>e.id));Object.keys(syn).forEach(id=>{if(!eids.has(id)){ops.push({t:"del",ref:fpath("sofs",s.id,"events",id)});delete syn[id]}});
+        if(syn[e.id]!==h){ops.push({t:"set",ref:fpath("sofs",s.id,"events",e.id),data:evPay(e)});marks.push(()=>syn[e.id]=h)}});
+      const eids=new Set(s.events.map(e=>e.id));Object.keys(syn).forEach(id=>{if(!eids.has(id)){ops.push({t:"del",ref:fpath("sofs",s.id,"events",id)});marks.push(()=>delete syn[id])}});
       const te=S.te[s.id]||(S.te[s.id]={});
       const adds=s.tallyEntries.filter(x=>!(x.id in te)&&mine(x));const lids=new Set(s.tallyEntries.map(x=>x.id));
       const dels=Object.keys(te).filter(id=>!lids.has(id)&&(isCap()||te[id]===me()));
       const groups={};adds.forEach(x=>{const b=x.by||me();(groups[b]=groups[b]||[]).push(x)});
       Object.keys(groups).forEach(b=>{const g=groups[b];for(let i=0;i<g.length;i+=400){const ch=g.slice(i,i+400);
         ops.push({t:"set",ref:FB.fs.doc(fcol("sofs",s.id,"tally")),data:{by:b,at:Date.now(),add:ch.map(x=>clean({i:x.id,k:x.tallyId,h:x.holdId||null,q:+x.qty,t:x.t,b:x.by||me()})),del:[]}});
-        ch.forEach(x=>{te[x.id]=x.by||me();revert.push(()=>delete te[x.id])})}});
-      if(dels.length){ops.push({t:"set",ref:FB.fs.doc(fcol("sofs",s.id,"tally")),data:{by:me(),at:Date.now(),add:[],del:dels}});dels.forEach(id=>{const o=te[id];delete te[id];revert.push(()=>te[id]=o)})}
+        marks.push(()=>ch.forEach(x=>te[x.id]=x.by||me()))}});
+      if(dels.length){ops.push({t:"set",ref:FB.fs.doc(fcol("sofs",s.id,"tally")),data:{by:me(),at:Date.now(),add:[],del:dels}});marks.push(()=>dels.forEach(id=>delete te[id]))}
     });
-    if(ops.length){save();SY.awaiting=true;updateSyncUI();
-      const commits=[];for(let i=0;i<ops.length;i+=450){const b=fs.writeBatch(FB.db);ops.slice(i,i+450).forEach(o=>{if(o.t==="set"){b.set(o.ref,clean(o.data));addBytes(o.data)}else b.delete(o.ref)});commits.push(b.commit())}
-      Promise.all(commits).then(()=>{SY.awaiting=false;SY.last=Date.now();SY.err="";updateSyncUI()}).catch(e=>{revert.forEach(f=>f());save();SY.awaiting=false;syncErr(e)});
-    }else{SY.last=SY.last||Date.now()}
-  }catch(e){revert.forEach(f=>f());syncErr(e)}
-  SY.pushing=false;updateSyncUI()}
+    if(!ops.length){SY.last=SY.last||Date.now();SY.pushing=false;updateSyncUI();return}
+    SY.awaiting=true;updateSyncUI();
+    const commits=[];for(let i=0;i<ops.length;i+=450){const b=fs.writeBatch(FB.db);ops.slice(i,i+450).forEach(o=>{if(o.t==="set"){b.set(o.ref,clean(o.data));addBytes(o.data)}else b.delete(o.ref)});commits.push(b.commit())}
+    let timer;const timeout=new Promise((_,rej)=>timer=setTimeout(()=>rej({code:"timeout"}),120000));
+    try{await Promise.race([Promise.all(commits),timeout]);clearTimeout(timer);marks.forEach(f=>f());save();SY.last=Date.now();SY.err="";SY.fatal=false}
+    catch(e){clearTimeout(timer);if(e&&e.code!=="timeout")syncErr(e)}
+  }catch(e){syncErr(e)}
+  SY.awaiting=false;SY.pushing=false;updateSyncUI();
+  if(online()&&pendingCount())schedulePush(isCap()?8000:15000)}
 
 /* ---- network + status ---- */
 function applyNet(){if(!FB)return;try{SY.paused?FB.fs.disableNetwork(FB.db):FB.fs.enableNetwork(FB.db)}catch(e){}}
