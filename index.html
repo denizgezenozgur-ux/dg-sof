@@ -268,6 +268,8 @@ nav.tabs button{font-size:11px;padding-inline:2px}
 .install{display:flex;gap:10px;align-items:center;background:var(--navy);color:var(--navy-ink);border-radius:12px;padding:12px 14px;font-size:14px}
 .install img{width:40px;height:40px;border-radius:10px;flex:none}
 .install div{flex:1;min-width:0}
+.sheet-bg{z-index:60!important}
+.toast{z-index:70!important}
 .search{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 12px;font-size:15px;margin-bottom:12px}
 </style>
 
@@ -1047,19 +1049,19 @@ function packSkeleton(s){const v=vesselOf(s);const a=R.auth?{name:R.auth.name,sa
     vessels:[{id:v.id,name:v.name,imo:v.imo,flag:v.flag,holds:v.holds,members:v.members.map(m=>({id:m.id,name:m.name,role:m.role,pw:m.pw}))}],
     sofs:[{id:s.id,vesselId:s.vesselId,created:s.created,voyage:{port:s.voyage.port,cargo:s.voyage.cargo,op:s.voyage.op,voyNo:s.voyage.voyNo},
       holds:s.holds,tallies:s.tallies,events:[],entries:[],tallyEntries:[]}]}}}
-const QCHUNK=480;
+const QCHUNK=170;
 async function qrSheet(title,obj){const host=$("#sheetHost");
   let parts=[];try{const p=await zpack(obj);const gid=Math.random().toString(36).slice(2,6);const n=Math.ceil(p.length/QCHUNK);
     for(let i=0;i<n;i++)parts.push(`DGQ1|${gid}|${i+1}|${n}|`+p.slice(i*QCHUNK,(i+1)*QCHUNK))}catch(e){toast("QR hazırlanamadı");return}
   let idx=0,auto=parts.length>1,timer=null;
   host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="QR"><h3>${esc(title)}</h3>
-    <p class="note" style="margin:0">Karşı telefonda <b>“QR okut”</b>a basıp kamerayı bu ekrana tutun. İnternet gerekmez.${parts.length>1?` Kodlar sırayla değişir; okuyan telefon hepsini toplar.`:""}</p>
-    <div style="background:#fff;border-radius:12px;padding:10px;display:flex;justify-content:center"><canvas id="qrC" width="720" height="720" style="width:min(100%,360px);height:auto;image-rendering:pixelated"></canvas></div>
+    <p class="note" style="margin:0">Karşı telefonda <b>“QR okut”</b>a basıp kamerayı bu ekrana tutun. İnternet gerekmez. <b>Ekran parlaklığını sonuna kadar açın.</b>${parts.length>1?` Kodlar sırayla değişir; okuyan telefon hepsini toplar.`:""}</p>
+    <div style="background:#fff;border-radius:12px;padding:10px;display:flex;justify-content:center"><canvas id="qrC" width="720" height="720" style="width:min(100%,420px);height:auto;image-rendering:pixelated"></canvas></div>
     <div class="row" style="justify-content:center;gap:12px">${parts.length>1?`<button class="btn ghost" id="qrP" aria-label="Önceki">‹</button><b class="mono" id="qrN"></b><button class="btn ghost" id="qrX" aria-label="Sonraki">›</button><button class="btn ghost sm" id="qrA"></button>`:""}</div>
     <div class="row" style="justify-content:flex-end"><button class="btn pri" id="qrClose">Kapat</button></div></div></div>`;
   let wake=null;try{wake=await navigator.wakeLock.request("screen")}catch(e){}
   const show=()=>{QRGEN.draw($("#qrC"),parts[idx],"L");const n=$("#qrN");if(n)n.textContent=`${idx+1} / ${parts.length}`;const a=$("#qrA");if(a)a.textContent=auto?"Durdur":"Otomatik"};
-  const tick=()=>{clearInterval(timer);if(auto)timer=setInterval(()=>{if(!$("#qrC")){clearInterval(timer);return}idx=(idx+1)%parts.length;show()},1100)};
+  const tick=()=>{clearInterval(timer);if(auto)timer=setInterval(()=>{if(!$("#qrC")){clearInterval(timer);return}idx=(idx+1)%parts.length;show()},1500)};
   show();tick();
   if(parts.length>1){$("#qrP").onclick=()=>{auto=false;tick();idx=(idx-1+parts.length)%parts.length;show()};$("#qrX").onclick=()=>{auto=false;tick();idx=(idx+1)%parts.length;show()};$("#qrA").onclick=()=>{auto=!auto;tick();show()}}
   $("#qrClose").onclick=()=>{clearInterval(timer);try{wake&&wake.release()}catch(e){}host.innerHTML=""}}
@@ -1067,38 +1069,49 @@ function loadJsQR(){return new Promise(res=>{if(window.jsQR)return res(true);con
 // onDone(obj) receives the decoded payload
 async function scanSheet(title,onDone){const host=$("#sheetHost");
   host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="QR okut"><h3>${esc(title)}</h3>
-    <div style="position:relative;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:1;max-width:100%"><video id="scV" playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
-      <div style="position:absolute;inset:12%;border:3px solid var(--accent);border-radius:12px;pointer-events:none"></div></div>
-    <p class="note" id="scS" style="margin:0">Kamera açılıyor…</p><p class="err" id="scE" hidden></p>
-    <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="scC">Vazgeç</button></div></div></div>`;
-  let stream=null,stop=false;const parts={};let need=0,gid=null;
+    <div style="position:relative;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:1;max-width:100%"><video id="scV" playsinline muted autoplay style="width:100%;height:100%;object-fit:cover"></video>
+      <div style="position:absolute;inset:10%;border:3px solid var(--accent);border-radius:12px;pointer-events:none"></div></div>
+    <p class="note" id="scS" style="margin:0;font-weight:600">Kamera açılıyor…</p><p class="err" id="scE" hidden></p>
+    <p class="note" style="margin:0">İpucu: QR gösteren telefonun ekran parlaklığını sonuna kadar açın, kamerayı 15–25 cm uzakta sabit tutun.</p>
+    <div class="row" style="justify-content:space-between"><label class="btn ghost" style="display:inline-flex;align-items:center">Fotoğraftan oku<input type="file" id="scF" accept="image/*" capture="environment" hidden></label><button class="btn ghost" id="scC">Vazgeç</button></div></div></div>`;
+  let stream=null,stop=false;const parts={};let need=0,gid=null,frames=0;
   const end=()=>{stop=true;try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}};
   $("#scC").onclick=()=>{end();host.innerHTML=""};
-  const fail=m=>{const e=$("#scE");if(e){e.hidden=false;e.textContent=m}$("#scS").hidden=true};
-  if(inFrame)return fail("Kamera bu önizleme penceresinde kapalı. Kurulu uygulamada (ana ekrandaki DG ikonu) çalışır.");
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return fail("Bu tarayıcı kameraya erişemiyor. Uygulamayı kurup oradan açın.");
-  let detector=null;try{if("BarcodeDetector" in window){const f=await BarcodeDetector.getSupportedFormats();if(f.includes("qr_code"))detector=new BarcodeDetector({formats:["qr_code"]})}}catch(e){}
-  if(!detector&&!(await loadJsQR()))return fail("QR okuyucu yüklenemedi. Uygulamayı bir kez internetteyken açın; sonra internetsiz de çalışır.");
-  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280},height:{ideal:1280}},audio:false})}
-  catch(e){return fail("Kamera izni verilmedi. Telefon ayarlarından bu uygulamaya kamera izni verin.")}
-  const v=$("#scV");v.srcObject=stream;try{await v.play()}catch(e){}
-  $("#scS").textContent="QR kodu çerçeveye getirin…";
+  const status=t=>{const e=$("#scS");if(e){e.hidden=false;e.textContent=t}};
+  const fail=m=>{const e=$("#scE");if(e){e.hidden=false;e.textContent=m}};
   const cv=document.createElement("canvas"),g=cv.getContext("2d",{willReadFrequently:true});
-  const handle=async txt=>{if(!txt)return;
-    if(!txt.startsWith("DGQ1|")){$("#scS").textContent="Bu QR SOF Defteri’ne ait değil";return}
+  let detector=null;try{if("BarcodeDetector" in window){const f=await BarcodeDetector.getSupportedFormats();if(f.includes("qr_code"))detector=new BarcodeDetector({formats:["qr_code"]})}}catch(e){}
+  let jsq=!!window.jsQR;loadJsQR().then(ok=>{jsq=ok});
+  const handle=async txt=>{if(!txt||stop)return;
+    if(!txt.startsWith("DGQ1|")){status("Bu QR SOF Defteri’ne ait değil");return}
     const [, g2, i, n]=txt.split("|",4);const body=txt.slice(["DGQ1",g2,i,n].join("|").length+1);
     if(gid!==g2){gid=g2;need=+n;for(const k in parts)delete parts[k]}
-    parts[+i]=body;const got=Object.keys(parts).length;
-    if(navigator.vibrate&&got)try{navigator.vibrate(15)}catch(e){}
-    $("#scS").textContent=need>1?`Okunan: ${got} / ${need}`:"Okundu";
+    const isNew=!parts[+i];parts[+i]=body;const got=Object.keys(parts).length;
+    if(isNew&&navigator.vibrate)try{navigator.vibrate(25)}catch(e){}
+    if(need>1){const miss=[];for(let k=1;k<=need;k++)if(!parts[k])miss.push(k);status(`Okunan: ${got} / ${need}${miss.length?" · bekleniyor: "+miss.join(", "):""}`)}else status("Okundu");
     if(got===need){end();let obj;try{let s="";for(let k=1;k<=need;k++)s+=parts[k];obj=await zunpack(s)}catch(e){host.innerHTML="";toast("QR çözülemedi, tekrar deneyin");return}
       host.innerHTML="";onDone(obj)}};
+  // decode one image source (video frame or photo) with every engine available
+  const decode=async(src,w,h)=>{
+    if(detector){try{const r=await detector.detect(src);if(r&&r.length){for(const c of r)await handle(c.rawValue);return true}}catch(e){}}
+    if(jsq&&window.jsQR){const sc=Math.min(1,800/Math.max(w,h));const W=Math.round(w*sc),H=Math.round(h*sc);cv.width=W;cv.height=H;g.drawImage(src,0,0,W,H);
+      const r=window.jsQR(g.getImageData(0,0,W,H).data,W,H,{inversionAttempts:"attemptBoth"});if(r){await handle(r.data);return true}}
+    return false};
+  $("#scF").onchange=async ev=>{const f=ev.target.files[0];ev.target.value="";if(!f)return;
+    try{const bmp=await createImageBitmap(f);const ok=await decode(bmp,bmp.width,bmp.height);if(!ok)status("Fotoğrafta QR bulunamadı. Daha yakından ve net çekin.")}catch(e){status("Fotoğraf okunamadı")}};
+  if(inFrame){fail("Kamera bu önizleme penceresinde kapalı. Kurulu uygulamada (ana ekrandaki DG ikonu) çalışır.");return}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){fail("Bu tarayıcı canlı kameraya erişemiyor. “Fotoğraftan oku” ile QR’ın fotoğrafını çekin.");return}
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false})}
+  catch(e){fail("Kamera izni verilmedi. Telefon ayarlarından tarayıcıya / uygulamaya kamera izni verin, ya da “Fotoğraftan oku”yu kullanın.");return}
+  if(stop){end();return}
+  try{const tr=stream.getVideoTracks()[0],cap=tr.getCapabilities?tr.getCapabilities():{};if(cap.focusMode&&cap.focusMode.includes("continuous"))await tr.applyConstraints({advanced:[{focusMode:"continuous"}]})}catch(e){}
+  const v=$("#scV");v.srcObject=stream;try{await v.play()}catch(e){}
+  status("QR kodu çerçeveye getirin…");
   const loop=async()=>{if(stop||!$("#scV"))return end();
-    try{if(v.readyState>=2){
-      if(detector){const r=await detector.detect(v);for(const c of r)await handle(c.rawValue)}
-      else{const w=v.videoWidth,h=v.videoHeight,sz=Math.min(w,h,900),sx=(w-Math.min(w,h))/2,sy=(h-Math.min(w,h))/2;cv.width=cv.height=sz;
-        g.drawImage(v,sx,sy,Math.min(w,h),Math.min(w,h),0,0,sz,sz);const r=window.jsQR(g.getImageData(0,0,sz,sz).data,sz,sz,{inversionAttempts:"dontInvert"});if(r)await handle(r.data)}}}catch(e){}
-    setTimeout(loop,120)};
+    try{if(v.readyState>=2&&v.videoWidth){frames++;
+      if(!detector&&!jsq){if(frames>40)fail("QR okuyucu yüklenemedi. Uygulamayı bir kez internetteyken açın, ya da “Fotoğraftan oku”yu deneyin.")}
+      else await decode(v,v.videoWidth,v.videoHeight)}}catch(e){}
+    setTimeout(loop,100)};
   loop()}
 function importSnapshot(o){const s=R.sofs.find(x=>x.id===o.sof);if(!s)throw{msg:"Bu sayımın ait olduğu SOF bu telefonda yok. Önce personel paketini o telefona yükleyin."};
   s.sync=s.sync||{};if(s.sync[o.by]&&o.at<s.sync[o.by])throw{msg:"Bu sayım daha önce alınandan eski, atlandı."};
