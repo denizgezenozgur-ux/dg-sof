@@ -451,7 +451,7 @@ setInterval(tick,15000);tick();
 
 /* ---------- tabs ---------- */
 let TAB="fleet";
-function go(t){if(!isCap())t="tally";TAB=t;
+function go(t){if(!isCap()&&!["ev","tally"].includes(t))t="ev";TAB=t;
   $$("nav.tabs button").forEach(x=>x.classList.toggle("on",x.dataset.tab===t));
   $$("main section").forEach(s=>s.classList.toggle("on",s.id==="tab-"+t));
   renderTab();window.scrollTo(0,0)}
@@ -467,8 +467,8 @@ function renderHeader(){const s=cur(),v=vesselOf(s);
   $("#hdrVessel").textContent=s?[v.name,s.voyage.port,fD(span(s)[0])].filter(Boolean).join(" · "):"Gemi seçilmedi — dokunun";
   const wb=$("#whoBtn");wb.hidden=!SES;
   if(SES){wb.textContent=(isCap()?"⚓ ":"")+mName(v||{members:[]},me());wb.classList.remove("none")}
-  const nb=$$("nav.tabs button");nb.forEach(b=>b.hidden=!isCap()&&b.dataset.tab!=="tally");
-  $("nav.tabs .in").style.gridTemplateColumns=isCap()?"":"1fr"}
+  const nb=$$("nav.tabs button");nb.forEach(b=>b.hidden=!isCap()&&!["ev","tally"].includes(b.dataset.tab));
+  $("nav.tabs .in").style.gridTemplateColumns=isCap()?"":"1fr 1fr"}
 $("#whoBtn").onclick=()=>accountSheet();
 
 /* pick who is entering data on this phone (per vessel) */
@@ -623,11 +623,13 @@ function sofSheet(vid){
 function lastOf(s,label){let r=null;for(const e of s.events)if(e.label===label&&(!r||e.t>r.t))r=e;return r}
 function renderTaps(){const s=cur();
   if(!s){$("#tapGroups").innerHTML=gate();wireGate();return}
-  $("#tapGroups").innerHTML=GROUPS.map((g,gi)=>`<h2>${esc(g.name)}</h2><div class="grid">${
+  const sb=isCap()?"":(()=>{const v=vesselOf(s),n=s.events.filter(e=>e.by===me()).length;return `<div class="banner"><span><b>${esc(mName(v,me()))}</b> · ${esc(v.name)}${s.voyage.port?" · "+esc(s.voyage.port):""} · ${n} olay</span><button class="btn sm dark" id="evSend">Kayıtlarımı gönder</button></div>`})();
+  $("#tapGroups").innerHTML=sb+GROUPS.map((g,gi)=>`<h2>${esc(g.name)}</h2><div class="grid">${
     g.items.map(l=>{const e=lastOf(s,l);return `<button class="tap${g.key.includes(l)?" key":""}${e?" done":""}" data-l="${esc(l)}"><b>${esc(l)}</b><i>${e?fD(e.t).slice(0,5)+" "+fT(e.t):"Bas → saat kaydet"}</i></button>`}).join("")
   }${gi===GROUPS.length-1?`<button class="tap custom" id="customTap"><b>+ Diğer olay</b></button>`:""}</div>`).join("");
   $$(".tap[data-l]").forEach(b=>b.onclick=()=>stamp(b.dataset.l));
   $("#customTap").onclick=()=>openEditor(null,true);
+  if(!isCap())$("#evSend").onclick=()=>sendSheet();
 }
 function stamp(label){const s=cur();if(!s)return;
   const e={id:uid(),t:Date.now(),label,note:"",photos:[],by:me()};
@@ -708,7 +710,7 @@ function renderTally(){const s=cur();
   if(!s){$("#tallyWrap").innerHTML=gate();wireGate();return}
   const v=vesselOf(s),hid=tHold[s.id]||"",who=me();
   $("#tallyWrap").innerHTML=`
-    ${isCap()?"":`<div class="banner"><span><b>${esc(mName(v,who))}</b> · ${esc(v.name)}${s.voyage.port?" · "+esc(s.voyage.port):""}</span><button class="btn sm dark" id="tSend">Sayımlarımı gönder</button></div>`}
+    ${isCap()?"":`<div class="banner"><span><b>${esc(mName(v,who))}</b> · ${esc(v.name)}${s.voyage.port?" · "+esc(s.voyage.port):""}</span><button class="btn sm dark" id="tSend">Kayıtlarımı gönder</button></div>`}
     <div class="tbar" role="tablist" aria-label="Ambar"><button data-th="" class="${hid?"":"on"}">Ambarsız</button>${s.holds.map(h=>`<button data-th="${h.id}" class="${h.id===hid?"on":""}">${esc(h.name)}</button>`).join("")}</div>
     <div class="tallies">${s.tallies.map(t=>{const tot=tallyOf(s,t.id),inH=hid?tallyOf(s,t.id,hid):null;
       const per={};s.tallyEntries.filter(x=>x.tallyId===t.id).forEach(x=>per[x.by||""]=(per[x.by||""]||0)+(+x.qty||0));
@@ -809,9 +811,9 @@ function renderRep(){const s=cur();
       <h2>Personel telefonları</h2>
       <div class="row">
         <button class="btn dark" id="packBtn">Personel paketi hazırla</button>
-        <button class="btn ghost" id="impBtn">Personel sayımını al</button>
+        <button class="btn ghost" id="impBtn">Personel kayıtlarını al</button>
       </div>
-      <p class="note">Paket; bu SOF’u, sayaçları ve personel şifrelerini içerir (fotoğraflar hariç). Personel telefonunda giriş ekranından yüklenir. Personel “Sayımlarımı gönder” ile kod yollar, siz burada “Personel sayımını al” ile eklersiniz.</p>
+      <p class="note">Paket; bu SOF’u, sayaçları ve personel şifrelerini içerir (fotoğraflar hariç). Personel telefonunda giriş ekranından yüklenir. Personel “Kayıtlarımı gönder” ile kod yollar, siz burada “Personel kayıtlarını al” ile eklersiniz.</p>
       <h2>Yedek (tüm gemiler)</h2>
       <div class="row">
         <button class="btn ghost" id="expBtn"${inFrame?" hidden":""}>Yedeği indir (.json)</button>
@@ -902,7 +904,7 @@ function findMember(id){for(const v of R.vessels){const m=(v.members||[]).find(x
 function enterApp(){$("#login").hidden=true;renderHeader();
   if(!isCap()){const f=findMember(SES.id);const c=cur();
     if(f&&(!c||c.vesselId!==f.v.id)){const l=R.sofs.filter(x=>x.vesselId===f.v.id).sort((a,b)=>b.created-a.created)[0];R.cur=l?l.id:null;save()}}
-  renderHeader();go(isCap()?(cur()?"ev":"fleet"):"tally")}
+  renderHeader();go(isCap()?(cur()?"ev":"fleet"):"ev")}
 function logout(){SES=null;saveSes();$("#sheetHost").innerHTML="";renderLogin()}
 
 /* ---------- code transfer (no internet) ---------- */
@@ -939,9 +941,10 @@ function codeSheet(title,note,code,fname,qrFn){const host=$("#sheetHost");
   $("#cbK").onclick=()=>{const fb=()=>{$("#cbx").focus();$("#cbx").select();toast("Kod seçildi, kopyalayın")};
     try{navigator.clipboard.writeText(code).then(()=>toast("Kod kopyalandı. WhatsApp veya e-postaya yapıştırın."),fb)}catch(e){fb()}};
   if(!inFrame)$("#cbF").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([code],{type:"text/plain"}));a.download=fname;document.body.appendChild(a);a.click();a.remove()}}
-function sendSheet(){const s=cur();if(!s)return;const mine=s.tallyEntries.filter(x=>x.by===me());
-  codeSheet("Sayımlarımı gönder",`${mine.length} kayıt · toplam ${num(mine.reduce((a,b)=>a+(+b.qty||0),0))} adet. Kodu kopyalayıp kaptana gönderin. Her gönderim tüm sayımlarınızı içerir; kaptanda en son gönderdiğiniz geçerli olur, sayılar ikiye katlanmaz.`,
-    enc({k:"tally",sof:s.id,by:me(),at:Date.now(),tallies:s.tallies,entries:mine}),`tally_${mName(vesselOf(s),me()).replace(/\W+/g,"_")}_${fD(Date.now()).replace(/\./g,"-")}.txt`,()=>staffSnapshot(s))}
+function sendSheet(){const s=cur();if(!s)return;const mine=s.tallyEntries.filter(x=>x.by===me()),evs=s.events.filter(e=>e.by===me());
+  const nph=evs.reduce((a,e)=>a+e.photos.length,0);
+  codeSheet("Kayıtlarımı gönder",`${evs.length} olay · ${mine.length} sayım (${num(mine.reduce((a,b)=>a+(+b.qty||0),0))} adet). Her gönderim tüm kayıtlarınızı içerir; kaptanda en son gönderdiğiniz geçerli olur, hiçbir şey ikiye katlanmaz.${nph?` <b>${nph} fotoğraf yalnızca Paylaş / dosya ile gider, QR’a sığmaz.</b>`:""}`,
+    enc({k:"tally",sof:s.id,by:me(),at:Date.now(),tallies:s.tallies,entries:mine,events:evs}),`tally_${mName(vesselOf(s),me()).replace(/\W+/g,"_")}_${fD(Date.now()).replace(/\./g,"-")}.txt`,()=>staffSnapshot(s))}
 function packSheet(){const s=cur();if(!s)return;const v=vesselOf(s);
   const noPw=v.members.filter(m=>!m.pw).map(m=>m.name);
   const sof=JSON.parse(JSON.stringify(s));sof.events.forEach(e=>e.photos=[]);
@@ -949,8 +952,8 @@ function packSheet(){const s=cur();if(!s)return;const v=vesselOf(s);
   codeSheet("Personel paketi",`Personel telefonunda giriş ekranında “QR okut” ile bu ekranı okutun (internetsiz) ya da kodu “Kaptandan gelen kodu yükle”ye yapıştırın.${noPw.length?` <b style="color:var(--warn)">Şifresi olmayan üyeler giriş yapamaz: ${esc(noPw.join(", "))}</b>`:""}`,
     enc({k:"pack",data}),`paket_${v.name.replace(/\W+/g,"_")}.txt`,()=>packSkeleton(s))}
 function pasteSheet(){const host=$("#sheetHost");
-  host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Kod yükle"><h3>Personel sayımını al</h3>
-    <p class="note" style="margin:0">En kolayı: personel “Sayımlarımı gönder → QR göster”e bassın, siz aşağıdaki “QR okut” ile okutun. Ya da kodu yapıştırın / dosyayı seçin (Bluetooth veya Quick Share ile gelen dosya İndirilenler’dedir).</p>
+  host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Kod yükle"><h3>Personel kayıtlarını al</h3>
+    <p class="note" style="margin:0">En kolayı: personel “Kayıtlarımı gönder → QR göster”e bassın, siz aşağıdaki “QR okut” ile okutun. Ya da kodu yapıştırın / dosyayı seçin (Bluetooth veya Quick Share ile gelen dosya İndirilenler’dedir).</p>
     <textarea class="copybox" id="pIn" placeholder="SOF:…"></textarea><p class="err" id="pErr" hidden></p>
     <div class="row" style="justify-content:space-between"><label class="btn ghost" style="display:inline-flex;align-items:center">Dosya seç<input type="file" id="pF" accept=".txt,.json,text/plain,application/json" hidden></label>
     <div class="row"><button class="btn ghost" id="pC">Kapat</button><button class="btn pri" id="pGo">Ekle</button></div></div>
@@ -1037,7 +1040,8 @@ async function zunpack(s){const k=s[0],u=unb64(s.slice(1));
 function staffSnapshot(s){const by=me(),ti=s.tallies.map(t=>t.id),hi=s.holds.map(h=>h.id);
   const mine=s.tallyEntries.filter(x=>x.by===by);const t0=mine.length?Math.floor(Math.min(...mine.map(x=>x.t))/60000):0;
   return{k:"ts",sof:s.id,by,at:Date.now(),ti,tn:s.tallies.map(t=>t.name),hi,t0,
-    e:mine.map(x=>[ti.indexOf(x.tallyId),x.holdId?hi.indexOf(x.holdId):-1,+x.qty,Math.floor(x.t/60000)-t0])}}
+    e:mine.map(x=>[ti.indexOf(x.tallyId),x.holdId?hi.indexOf(x.holdId):-1,+x.qty,Math.floor(x.t/60000)-t0]),
+    ev:s.events.filter(e=>e.by===by).map(e=>[e.label,Math.floor(e.t/60000),e.note||""])}}
 function packSkeleton(s){const v=vesselOf(s);const a=R.auth?{name:R.auth.name,salt:R.auth.salt,hash:R.auth.hash}:null;
   return{k:"pack",data:{auth:a,cur:s.id,
     vessels:[{id:v.id,name:v.name,imo:v.imo,flag:v.flag,holds:v.holds,members:v.members.map(m=>({id:m.id,name:m.name,role:m.role,pw:m.pw}))}],
@@ -1100,16 +1104,21 @@ function importSnapshot(o){const s=R.sofs.find(x=>x.id===o.sof);if(!s)throw{msg:
   s.sync=s.sync||{};if(s.sync[o.by]&&o.at<s.sync[o.by])throw{msg:"Bu sayım daha önce alınandan eski, atlandı."};
   (o.ti||[]).forEach((id,i)=>{if(!s.tallies.some(t=>t.id===id))s.tallies.push({id,name:(o.tn||[])[i]||"Sayaç",unitW:""})});
   const ents=o.k==="ts"?o.e.map(([a,b,q,d],i)=>({id:"s"+o.by+"_"+o.at+"_"+i,tallyId:o.ti[a],holdId:b>=0?o.hi[b]:null,qty:q,t:(o.t0+d)*60000,by:o.by})):(o.entries||[]);
-  s.tallyEntries=s.tallyEntries.filter(x=>x.by!==o.by).concat(ents);s.sync[o.by]=o.at||Date.now();save();renderAll();
-  return `${esc(mName(vesselOf(s),o.by))}: ${ents.length} kayıt, ${num(ents.reduce((a,b)=>a+(+b.qty||0),0))} adet alındı`}
+  s.tallyEntries=s.tallyEntries.filter(x=>x.by!==o.by).concat(ents);
+  let evs=null;if(o.ev)evs=o.ev.map(([l,m,n],i)=>({id:"e"+o.by+"_"+o.at+"_"+i,label:l,t:m*60000,note:n||"",photos:[],by:o.by}));else if(o.events)evs=o.events.map(e=>Object.assign({photos:[]},e,{by:o.by}));
+  if(evs){// keep photos the captain already received if the new copy has none (QR carries no photos)
+    const old=s.events.filter(e=>e.by===o.by);evs.forEach(e=>{if(!e.photos.length){const m=old.find(x=>x.label===e.label&&Math.floor(x.t/60000)===Math.floor(e.t/60000));if(m)e.photos=m.photos}});
+    s.events=s.events.filter(e=>e.by!==o.by).concat(evs)}
+  s.sync[o.by]=o.at||Date.now();save();renderAll();
+  return `${esc(mName(vesselOf(s),o.by))}: ${evs?evs.length+" olay, ":""}${ents.length} sayım (${num(ents.reduce((a,b)=>a+(+b.qty||0),0))} adet) alındı`}
 
 /* ---------- account ---------- */
 function accountSheet(){const host=$("#sheetHost");const cap=isCap();
   host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Hesap"><h3>${esc(mName(vesselOf(cur())||{members:[]},me()))}</h3>
-    <p class="note" style="margin:0">${cap?"Kaptan · tüm bölümlere erişim":"Personel · yalnızca Tally"}</p>
+    <p class="note" style="margin:0">${cap?"Kaptan · tüm bölümlere erişim":"Personel · Olay Bas ve Tally"}</p>
     ${cap?`<div class="lcard" style="box-shadow:none;padding:0"><h3 style="font-size:16px">Kaptan şifresini değiştir</h3>
       <input type="password" id="aO" class="pwin" placeholder="Mevcut şifre" autocomplete="current-password"><input type="password" id="aN" class="pwin" placeholder="Yeni şifre (en az 4)" autocomplete="new-password">
-      <p class="err" id="aE" hidden></p><button class="btn ghost" id="aS" style="align-self:flex-start">Şifreyi değiştir</button></div>`:`<button class="btn dark" id="aSend">Sayımlarımı gönder</button>`}
+      <p class="err" id="aE" hidden></p><button class="btn ghost" id="aS" style="align-self:flex-start">Şifreyi değiştir</button></div>`:`<button class="btn dark" id="aSend">Kayıtlarımı gönder</button>`}
     <div class="row" style="justify-content:space-between"><button class="btn ghost" id="aC">Kapat</button><button class="btn danger" id="aOut">Çıkış yap</button></div></div></div>`;
   $("#aC").onclick=()=>host.innerHTML="";$("#aOut").onclick=logout;
   if(!cap)$("#aSend").onclick=sendSheet;
@@ -1151,7 +1160,7 @@ function renderLogin(){const L=$("#login");L.hidden=false;
       <label class="field">Şifre<input id="sP1" type="password" autocomplete="new-password"></label>
       <label class="field">Şifre (tekrar)<input id="sP2" type="password" autocomplete="new-password"></label>
       <p class="err" id="sE" hidden></p><button class="btn pri" id="sGo">Kur ve giriş yap</button>
-      <p class="note" style="margin:0">Kaptan tüm bölümlere erişir. Personel, sizin belirlediğiniz şifreyle yalnızca Tally’ye girer.</p></div>
+      <p class="note" style="margin:0">Kaptan tüm bölümlere erişir. Personel, sizin belirlediğiniz şifreyle yalnızca Olay Bas ve Tally bölümlerine girer.</p></div>
       <div class="lcard"><h3>Personel misiniz?</h3><p class="note" style="margin:0">Kaptan telefonunda Rapor → “Personel paketi hazırla → QR göster”i açtırın ve okutun.</p>${scanCard}</div>${loadCard(false)}`}
   else if(LV==="forgot"){body=`<div class="lcard"><h3>Kaptan şifresini yenile</h3>
       <label class="field">Kurtarma kodu<input id="fC" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX"></label>
@@ -1169,9 +1178,9 @@ function renderLogin(){const L=$("#login");L.hidden=false;
   // wire
   const lin=$("#lLoad");if(lin){
     $("#lF").onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$("#lIn").value=r.result;$("#lLoad").click()};r.readAsText(f);ev.target.value=""};
-    lin.onclick=()=>{const e=$("#lInE");try{const o=dec($("#lIn").value);if(o.k==="tally")throw{msg:"Bu bir personel sayımı. Kaptan telefonunda Rapor → “Personel sayımını al” ile yükleyin."};
+    lin.onclick=()=>{const e=$("#lInE");try{const o=dec($("#lIn").value);if(o.k==="tally")throw{msg:"Bu bir personel sayımı. Kaptan telefonunda Rapor → “Personel kayıtlarını al” ile yükleyin."};
       const m=importData(o);LV="login";renderLogin();toast(m+". Şimdi adınızı seçip şifrenizle girin.")}catch(x){e.hidden=false;e.textContent=x&&x.msg?x.msg:"Kod okunamadı. Tamamını kopyaladığınızdan emin olun."}}}
-  if($("#lScan"))$("#lScan").onclick=()=>scanSheet("Kaptanın QR kodunu okutun",o=>{try{if(o.k!=="pack")throw{msg:"Bu bir personel sayımı. Kaptan telefonunda Rapor → “Personel sayımını al” ile okutun."};
+  if($("#lScan"))$("#lScan").onclick=()=>scanSheet("Kaptanın QR kodunu okutun",o=>{try{if(o.k!=="pack")throw{msg:"Bu bir personel sayımı. Kaptan telefonunda Rapor → “Personel kayıtlarını al” ile okutun."};
     const m=importData(o);LV="login";renderLogin();toast(m+". Şimdi adınızı seçip şifrenizle girin.")}catch(e){toast(e&&e.msg?e.msg:"Okunan veri yüklenemedi")}});
   if($("#lRecOk"))$("#lRecOk").onclick=()=>{REC=null;LV="login";SES={role:"cap"};saveSes();enterApp()};
   if($("#sGo"))$("#sGo").onclick=()=>{const e=$("#sE"),p1=$("#sP1").value,p2=$("#sP2").value;
