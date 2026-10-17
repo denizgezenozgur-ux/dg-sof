@@ -1144,7 +1144,7 @@ function installCard(){if(inFrame||standalone)return"";
 function wireInstall(){const b=$("#instBtn");if(b)b.onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();try{await deferredInstall.userChoice}catch(e){}deferredInstall=null;renderLogin()}}
 
 /* ---------- login screen ---------- */
-let LV="login",REC=null;
+let LV="login",REC=null,FIRST=null;
 function renderLogin(){const L=$("#login");L.hidden=false;
   const head=`<div class="logo"><img src="${LOGO}" alt="">DG SOF Defteri<small>${R.auth?"Giriş yapın":"İlk kurulum"}</small></div>`;
   const loadCard=open=>`<details class="lcard"${open?" open":""}><summary style="cursor:pointer;font-weight:600">Kaptandan gelen kodu yükle</summary>
@@ -1155,13 +1155,19 @@ function renderLogin(){const L=$("#login");L.hidden=false;
   let body="";
   if(LV==="rec"&&REC){body=`<div class="lcard"><h3>Kurtarma kodunuz</h3><div class="rcode">${REC}</div>
     <p class="note" style="margin:0">Kaptan şifresini unutursanız bu kodla yenileyebilirsiniz. Bir yere yazın; bir daha gösterilmeyecek.</p><button class="btn pri" id="lRecOk">Yazdım, devam et</button></div>`}
+  else if(!R.auth&&FIRST!=="cap"&&FIRST!=="staff"){body=`<div class="lcard"><h3>Bu telefonu kim kullanacak?</h3>
+      <button class="btn pri" id="fCap" style="min-height:60px;font-size:17px">⚓ Kaptanım</button>
+      <button class="btn dark" id="fStaff" style="min-height:60px;font-size:17px">Personelim (tallyman, vardiya)</button>
+      <p class="note" style="margin:0">Personel kendi hesabını açmaz. Kaptanın telefonundaki QR kodu okutarak girer.</p></div>`}
+  else if(!R.auth&&FIRST==="staff"){body=`<div class="lcard"><h3>Personel girişi</h3>
+      <ol class="note" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px"><li>Kaptandan telefonunda <b>Rapor → Personel paketi hazırla → QR göster</b>’i açmasını isteyin.</li><li>Aşağıdaki düğmeye basıp kamerayı o ekrana tutun.</li><li>Adınızı seçip kaptanın size verdiği şifreyle girin.</li></ol>
+      ${scanCard}</div>${loadCard(false)}<button class="lk" id="fBack2">Geri</button>`}
   else if(!R.auth){body=`<div class="lcard"><h3>Kaptan hesabı oluştur</h3>
       <label class="field">Adınız<input id="sN" placeholder="Örn. Kpt. A. Yılmaz" autocomplete="name"></label>
       <label class="field">Şifre<input id="sP1" type="password" autocomplete="new-password"></label>
       <label class="field">Şifre (tekrar)<input id="sP2" type="password" autocomplete="new-password"></label>
       <p class="err" id="sE" hidden></p><button class="btn pri" id="sGo">Kur ve giriş yap</button>
-      <p class="note" style="margin:0">Kaptan tüm bölümlere erişir. Personel, sizin belirlediğiniz şifreyle yalnızca Olay Bas ve Tally bölümlerine girer.</p></div>
-      <div class="lcard"><h3>Personel misiniz?</h3><p class="note" style="margin:0">Kaptan telefonunda Rapor → “Personel paketi hazırla → QR göster”i açtırın ve okutun.</p>${scanCard}</div>${loadCard(false)}`}
+      <p class="note" style="margin:0">Kaptan tüm bölümlere erişir. Personel, sizin belirlediğiniz şifreyle yalnızca Olay Bas ve Tally bölümlerine girer.</p></div><button class="lk" id="fBack2">Geri</button>`}
   else if(LV==="forgot"){body=`<div class="lcard"><h3>Kaptan şifresini yenile</h3>
       <label class="field">Kurtarma kodu<input id="fC" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX"></label>
       <label class="field">Yeni şifre<input id="fP" type="password" autocomplete="new-password"></label>
@@ -1180,6 +1186,9 @@ function renderLogin(){const L=$("#login");L.hidden=false;
     $("#lF").onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$("#lIn").value=r.result;$("#lLoad").click()};r.readAsText(f);ev.target.value=""};
     lin.onclick=()=>{const e=$("#lInE");try{const o=dec($("#lIn").value);if(o.k==="tally")throw{msg:"Bu bir personel sayımı. Kaptan telefonunda Rapor → “Personel kayıtlarını al” ile yükleyin."};
       const m=importData(o);LV="login";renderLogin();toast(m+". Şimdi adınızı seçip şifrenizle girin.")}catch(x){e.hidden=false;e.textContent=x&&x.msg?x.msg:"Kod okunamadı. Tamamını kopyaladığınızdan emin olun."}}}
+  if($("#fCap"))$("#fCap").onclick=()=>{FIRST="cap";renderLogin()};
+  if($("#fStaff"))$("#fStaff").onclick=()=>{FIRST="staff";renderLogin()};
+  if($("#fBack2"))$("#fBack2").onclick=()=>{FIRST=null;renderLogin()};
   if($("#lScan"))$("#lScan").onclick=()=>scanSheet("Kaptanın QR kodunu okutun",o=>{try{if(o.k!=="pack")throw{msg:"Bu bir personel sayımı. Kaptan telefonunda Rapor → “Personel kayıtlarını al” ile okutun."};
     const m=importData(o);LV="login";renderLogin();toast(m+". Şimdi adınızı seçip şifrenizle girin.")}catch(e){toast(e&&e.msg?e.msg:"Okunan veri yüklenemedi")}});
   if($("#lRecOk"))$("#lRecOk").onclick=()=>{REC=null;LV="login";SES={role:"cap"};saveSes();enterApp()};
