@@ -356,10 +356,11 @@ nav.tabs button{font-size:11px;padding-inline:2px}
 <div id="toastHost"></div>
 
 <script type="module">
-const B="https://www.gstatic.com/firebasejs/10.12.2/";
-try{const [a,au,fs]=await Promise.all([import(B+"firebase-app.js"),import(B+"firebase-auth.js"),import(B+"firebase-firestore.js")]);
-  window.FBX={a,au,fs};window.dispatchEvent(new Event("fbx-ready"))}
-catch(e){window.FBX_ERR=e;window.dispatchEvent(new Event("fbx-fail"))}
+let done=false,last=null;
+for(const V of ["11.0.2","10.14.1"]){const B="https://www.gstatic.com/firebasejs/"+V+"/";
+  try{const [a,au,fs]=await Promise.all([import(B+"firebase-app.js"),import(B+"firebase-auth.js"),import(B+"firebase-firestore.js")]);
+    window.FBX={a,au,fs,V};done=true;window.dispatchEvent(new Event("fbx-ready"));break}catch(e){last=e}}
+if(!done){window.FBX_ERR=last;window.dispatchEvent(new Event("fbx-fail"))}
 </script>
 <script>
 (function(){
@@ -781,7 +782,7 @@ function headCard(s,sendId){const v=vesselOf(s),op=s.voyage.op==="Discharging"?"
     ${isCap()?"":`<div class="meta"><span>${esc(mName(v,me()))} · bu tally’de ${mineN} kaydınız var</span></div>
     ${online()?"":`<div class="row"><button class="btn pri" id="${sendId}">Kayıtlarımı gönder</button><button class="btn ghost" data-newpack>Yeni liman / paket al</button></div>`}`}
     ${online()?`<div class="row" style="align-items:center"><span data-syncline style="flex:1;min-width:0;font-size:13.5px">${esc(syncText())}</span><button class="btn sm ghost" data-syncnow>Şimdi eşitle</button></div>`:""}</div>`}
-function wireHead(sendId){const b=$("#"+sendId);if(b)b.onclick=()=>sendSheet();$$("[data-syncnow]").forEach(x=>x.onclick=()=>{SY.err="";pushNow();updateSyncUI()});$$("[data-newpack]").forEach(x=>x.onclick=()=>staffNewPack())}
+function wireHead(sendId){const b=$("#"+sendId);if(b)b.onclick=()=>sendSheet();$$("[data-syncnow]").forEach(x=>x.onclick=()=>{if(SY.fatal)return repairSync();SY.err="";pushNow();updateSyncUI()});renderSyncButtons();$$("[data-newpack]").forEach(x=>x.onclick=()=>staffNewPack())}
 function staffNewPack(){const host=$("#sheetHost");const use=o=>{if(o.k!=="pack")throw{msg:"Bu bir personel kaydı, paket değil. Kaptanın Rapor → Personel paketi hazırla ekranındaki kodu kullanın."};staffConfirmPack(o)};
   host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Yeni paket"><h3>Yeni liman / paket al</h3>
     <p class="note" style="margin:0">Kaptan telefonunda yeni SOF’u açıp <b>Rapor → Personel paketi hazırla</b>’ya basmalı.</p>
@@ -1243,7 +1244,7 @@ const online=()=>!!(SES&&SES.online&&FB);
 function fbWait(ms){return new Promise(res=>{if(window.FBX)return res(true);if(window.FBX_ERR)return res(false);
   const t=setTimeout(()=>res(false),ms);window.addEventListener("fbx-ready",()=>{clearTimeout(t);res(true)},{once:true});window.addEventListener("fbx-fail",()=>{clearTimeout(t);res(false)},{once:true})})}
 function fbInit(){if(FB||!window.FBX)return FB;const {a,au,fs}=window.FBX;const app=a.initializeApp(FBCONF);let fdb;
-  try{fdb=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})})}catch(e){fdb=fs.getFirestore(app)}
+  try{fdb=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentSingleTabManager({})})})}catch(e){try{fdb=fs.initializeFirestore(app,{localCache:fs.memoryLocalCache()})}catch(x){fdb=fs.getFirestore(app)}}
   FB={a,au,fs,app,auth:au.getAuth(app),db:fdb};return FB}
 const toEmail=u=>{u=String(u||"").trim();return u.includes("@")?u:u.toLowerCase().replace(/\s+/g,"")+"@"+USERDOM};
 function authMsg(e){const c=(e&&e.code)||"";return({"auth/invalid-credential":"Kullanıcı adı / e-posta veya şifre yanlış","auth/wrong-password":"Şifre yanlış","auth/user-not-found":"Bu kullanıcı bulunamadı",
@@ -1273,7 +1274,7 @@ async function authChanged(u){if(SIGNUP)return;
 async function onlineSignedIn(u){const {fs}=FB;let p=null;
   try{const sn=await fs.getDoc(fs.doc(FB.db,"users",u.uid));if(sn.exists())p=sn.data()}catch(e){}
   if(!p){try{p=JSON.parse(localStorage.getItem("sof-prof-"+u.uid)||"null")}catch(e){}}
-  if(!p){toast("Bu hesabın profili bulunamadı. Kaptan hesabınızı yeniden açmalı.");try{await FB.au.signOut(FB.auth)}catch(e){}return}
+  if(!p){toast("Bu kullanıcının profili yok. Kaptan, Üyeler bölümünden bu kişiye “Hesap aç” yapmalı.");try{await FB.au.signOut(FB.auth)}catch(e){}return}
   try{localStorage.setItem("sof-prof-"+u.uid,JSON.stringify(p))}catch(e){}
   if(p.role==="staff"&&R.example){R=blankRoot();normalize(R)}
   SES={role:p.role==="cap"?"cap":"staff",id:p.role==="cap"?undefined:p.memberId,uid:u.uid,fleet:p.fleet,online:true,name:p.name||"",email:u.email};
@@ -1289,7 +1290,20 @@ function startSync(){stopSync();const {fs}=FB;applyNet();
   SY.unsubs.push(fs.onSnapshot(fpath("state","vessels"),sn=>applyVessels(sn),e=>syncErr(e)));
   if(isCap())SY.unsubs.push(fs.onSnapshot(fcol("sofs"),qs=>applySofs(qs),e=>syncErr(e)));
   subscribeActive();schedulePush(3000);updateSyncUI()}
-function syncErr(e){SY.err=authMsg(e);updateSyncUI()}
+function syncErr(e){const m=String((e&&e.message)||e||"");
+  if(/INTERNAL ASSERTION|Unexpected state|exclusive access|persistence layer/i.test(m)){SY.fatal=true;SY.err="Bağlantı önbelleği bozuldu. “Onar”a basın; kayıtlarınız silinmez."}
+  else SY.err=authMsg(e);updateSyncUI();renderSyncButtons()}
+function renderSyncButtons(){$$("[data-syncnow]").forEach(b=>{b.textContent=SY.fatal?"Onar":"Şimdi eşitle";b.classList.toggle("pri",!!SY.fatal);b.classList.toggle("ghost",!SY.fatal)})}
+// rebuild the Firebase cache: local records (separate storage) stay; everything is re-sent (sends are idempotent)
+async function repairSync(){const b=$$("[data-syncnow]");b.forEach(x=>{x.disabled=true;x.textContent="Onarılıyor…"});
+  const S=SYN();R.sync={migrated:S.migrated,vh:{},sof:{},ev:{},te:{},seen:S.seen||{}};
+  const v=JSON.parse(JSON.stringify(R));
+  await new Promise(res=>{try{const t=db.transaction(ST,"readwrite");t.objectStore(ST).put(v,"state");t.oncomplete=res;t.onerror=res}catch(e){try{localStorage.setItem("sof-state",JSON.stringify(v))}catch(x){}res()}});
+  try{stopSync();await FB.fs.terminate(FB.db);await FB.fs.clearIndexedDbPersistence(FB.db)}catch(e){}
+  try{indexedDB.deleteDatabase("firestore/[DEFAULT]/"+FBCONF.projectId+"/main")}catch(e){}
+  location.reload()}
+window.addEventListener("unhandledrejection",ev=>{const m=String((ev.reason&&ev.reason.message)||ev.reason||"");if(/INTERNAL ASSERTION/i.test(m)&&online())syncErr(ev.reason)});
+window.addEventListener("error",ev=>{const m=String(ev.message||"");if(/INTERNAL ASSERTION/i.test(m)&&online())syncErr(m)});
 function subscribeActive(){if(!online())return;const sid=R.cur;if(SY.activeSub===sid)return;stopActive();SY.activeSub=sid;if(!sid)return;const {fs}=FB;
   if(isCap()){
     SY.activeUnsubs.push(fs.onSnapshot(fcol("sofs",sid,"events"),qs=>applyEvents(qs,sid),e=>syncErr(e)));
@@ -1423,7 +1437,8 @@ async function createStaffAccount(v,m,user,pw){user=String(user||"").trim().toLo
   if(String(pw||"").length<6)throw{code:"auth/weak-password"};
   const {a,au,fs}=FB;const sec=a.getApps().find(x=>x.name==="sec")||a.initializeApp(FBCONF,"sec");const sa=au.getAuth(sec);
   try{await au.setPersistence(sa,au.inMemoryPersistence)}catch(e){}
-  const cr=await au.createUserWithEmailAndPassword(sa,toEmail(user),pw);
+  let cr;try{cr=await au.createUserWithEmailAndPassword(sa,toEmail(user),pw)}
+  catch(e){if(e&&e.code==="auth/email-already-in-use"){try{cr=await au.signInWithEmailAndPassword(sa,toEmail(user),pw)}catch(x){throw{code:"x",message:"Bu kullanıcı adı daha önce başka bir şifreyle açılmış. Farklı bir kullanıcı adı deneyin (örn. "+user+"2)."}}}else throw e}
   await fs.setDoc(fs.doc(FB.db,"users",cr.user.uid),{role:"staff",fleet:SES.fleet,memberId:m.id,vesselId:v.id,name:m.name,username:user});
   try{await au.signOut(sa)}catch(e){}
   if(m.uid&&m.uid!==cr.user.uid){try{await fs.deleteDoc(fs.doc(FB.db,"users",m.uid))}catch(e){}}
@@ -1488,7 +1503,7 @@ function onlineAccountSheet(){const host=$("#sheetHost"),cap=isCap();
     <div class="row" style="justify-content:space-between"><button class="btn ghost" id="aC">Kapat</button><button class="btn danger" id="aOut">Çıkış yap</button></div></div></div>`;
   $("#aC").onclick=()=>host.innerHTML="";
   $("#aOut").onclick=async()=>{const n=pendingCount();if(n&&!$("#aOut").dataset.c){$("#aOut").dataset.c=1;$("#aOut").textContent=`${n} kayıt henüz gönderilmedi. Yine de çık`;return}onlineLogout()};
-  $("#aNow").onclick=()=>{SY.err="";if(SY.paused){SY.paused=false;try{localStorage.setItem("sof-paused","0")}catch(e){}applyNet();$("#aPause").checked=false}pushNow();if(isCap())stopActive();subscribeActive();updateSyncUI()};
+  $("#aNow").onclick=()=>{SY.err="";if(SY.paused){SY.paused=false;try{localStorage.setItem("sof-paused","0")}catch(e){}applyNet();$("#aPause").checked=false}if(SY.fatal)return repairSync();pushNow();updateSyncUI()};
   $("#aPause").onchange=e=>{SY.paused=e.target.checked;try{localStorage.setItem("sof-paused",SY.paused?"1":"0")}catch(x){}applyNet();updateSyncUI()};
   if(!cap)$("#aQR").onclick=()=>sendSheet();
   $("#aS").onclick=async()=>{const e=$("#aE");try{const u=FB.auth.currentUser;
