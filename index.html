@@ -233,6 +233,11 @@ nav.tabs button{font-size:11px;padding-inline:2px}
 .tcard header b{font-family:var(--f-display);font-size:20px;letter-spacing:.04em;text-transform:uppercase;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tcount{font-family:var(--f-mono);font-size:44px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
 .tcount small{font-size:13px;color:var(--muted);font-family:var(--f-body);font-weight:500;margin-left:6px}
+.steps{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.steps span{font-size:12px;color:var(--muted);margin-right:2px}
+.steps button{border:0;border-radius:8px;min-width:42px;min-height:38px;padding:0 10px;background:var(--chip);font-family:var(--f-mono);font-weight:600;font-size:15px}
+.steps button.on{background:var(--navy);color:var(--navy-ink)}
+.tplus small{display:block;font-family:var(--f-body);font-size:12px;font-weight:500;opacity:.75;letter-spacing:0}
 .tplus{border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);font-family:var(--f-display);font-weight:700;font-size:30px;min-height:72px;width:100%;transition:transform .08s}
 .tplus:active{transform:scale(.97)}
 .tline{display:grid;grid-template-columns:auto 1fr auto;gap:6px}
@@ -707,6 +712,8 @@ function openEditor(id,isNew){const s=cur();if(!s)return;
 
 /* ---------- TALLY ---------- */
 const tHold={}; // selected hold per SOF (in-memory)
+const stepOf=tid=>{const v=R.steps&&R.steps[tid];return v>0?v:1};
+const setStep=(tid,n)=>{R.steps=R.steps||{};R.steps[tid]=n;save()};
 const tallyOf=(s,tid,hid)=>s.tallyEntries.filter(x=>x.tallyId===tid&&(!hid||x.holdId===hid)).reduce((a,b)=>a+(+b.qty||0),0);
 function renderTally(){const s=cur();
   if(!s){$("#tallyWrap").innerHTML=gate();wireGate();return}
@@ -722,8 +729,9 @@ function renderTally(){const s=cur();
         <header><b>${esc(t.name)}</b>${isCap()?`<button class="btn sm ghost" data-tset>Ayarlar</button>`:""}</header>
         <div class="tcount">${num(tot)}<small>adet${uw?` · ≈ ${num(tot*uw)} MT`:""}</small></div>
         ${hid?`<div class="note" style="margin:-4px 0 0">${esc((s.holds.find(h=>h.id===hid)||{}).name)}: <b class="mono" style="color:var(--ink)">${num(inH)}</b> adet</div>`:""}
-        <button class="tplus" data-tp>+1</button>
-        <div class="tline"><button class="btn ghost" data-tun title="Son kaydı geri al">−1</button><input type="number" inputmode="numeric" step="any" placeholder="Adet gir" data-tq aria-label="Adet"><button class="btn pri" data-tadd>Ekle</button></div>
+        ${(()=>{const st=stepOf(t.id),pre=[1,2,4,5,6,8,10,12];return `<div class="steps" role="group" aria-label="Her basışta"><span>Her basışta</span>${pre.map(n=>`<button data-st="${n}" class="${st===n?"on":""}">${n}</button>`).join("")}<button data-st="x" class="${pre.includes(st)?"":"on"}">${pre.includes(st)?"Diğer":num(st)}</button></div>
+        <button class="tplus" data-tp>+${num(st)}${st>1?`<small>bir basış = ${num(st)} adet</small>`:""}</button>`})()}
+        <div class="tline"><button class="btn ghost" data-tun title="Son kaydı geri al">Geri al</button><input type="number" inputmode="numeric" step="any" placeholder="Adet gir" data-tq aria-label="Adet"><button class="btn pri" data-tadd>Ekle</button></div>
         <div class="byuser">${Object.keys(per).length?Object.entries(per).map(([id,q])=>`<span>${esc(mName(v,id))}: <b>${num(q)}</b></span>`).join(""):"Henüz sayım yok"}</div>
         <details class="entries"${ents.length?"":" hidden"}><summary>${ents.length} kayıt</summary><ul>${ents.slice(0,60).map(x=>`<li><span class="mono">${fD(x.t).slice(0,5)} ${fT(x.t)}</span><span style="color:var(--muted);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(mName(v,x.by))}${x.holdId?" · "+esc((s.holds.find(h=>h.id===x.holdId)||{name:""}).name):""}</span><b>${num(+x.qty)}</b>${isCap()||x.by===who?`<button class="x" data-tdel="${x.id}" aria-label="Kaydı sil">×</button>`:""}</li>`).join("")}</ul></details>
       </div>`}).join("")}</div>
@@ -735,7 +743,11 @@ function renderTally(){const s=cur();
   $$(".tcard").forEach(el=>{const t=s.tallies.find(x=>x.id===el.dataset.t);
     const push=q=>{s.tallyEntries.push({id:uid(),tallyId:t.id,qty:q,t:Date.now(),by:me(),holdId:hid||null});save();renderTally();
       if(navigator.vibrate)try{navigator.vibrate(20)}catch(x){}};
-    el.querySelector("[data-tp]").onclick=()=>push(1);
+    el.querySelector("[data-tp]").onclick=()=>push(stepOf(t.id));
+    el.querySelectorAll("[data-st]").forEach(b=>b.onclick=()=>{if(b.dataset.st!=="x"){setStep(t.id,+b.dataset.st);renderTally();return}
+      const box=document.createElement("div");box.className="row";box.innerHTML=`<input type="number" inputmode="decimal" step="any" min="0" placeholder="Adet" style="flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px"><button class="btn pri">Seç</button>`;
+      b.parentNode.after(box);const i=box.querySelector("input");i.focus();
+      const ok=()=>{const n=parseFloat(String(i.value).replace(",","."));if(n>0){setStep(t.id,n);renderTally()}else i.focus()};box.querySelector("button").onclick=ok;i.onkeydown=e=>{if(e.key==="Enter")ok()}});
     const q=el.querySelector("[data-tq]");
     const add=()=>{const n=parseFloat(String(q.value).replace(",","."));if(!n)return q.focus();push(n);toast(`<span>${esc(t.name)}: <b>+${num(n)}</b></span>`)};
     el.querySelector("[data-tadd]").onclick=add;q.onkeydown=e=>{if(e.key==="Enter")add()};
