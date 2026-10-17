@@ -67,6 +67,8 @@ h2:first-child{margin-top:4px}
 .tap{position:relative;border:0;border-radius:10px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);padding:14px 12px 12px;text-align:left;min-height:68px;display:flex;flex-direction:column;justify-content:space-between;gap:6px;transition:transform .08s}
 .tap:active{transform:scale(.97)}
 .tap b{font-weight:600;font-size:14.5px;line-height:1.2}
+.tap em{font-style:normal;font-size:12px;color:var(--muted);line-height:1.2}
+.tap.key em{color:var(--accent-ink);opacity:.75}
 .tap i{font-style:normal;font-family:var(--f-mono);font-size:11.5px;color:var(--muted)}
 .tap.done{box-shadow:inset 0 0 0 2px var(--accent)}
 .tap.done i{color:var(--ink)}
@@ -361,12 +363,25 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const inFrame=(()=>{try{return window.self!==window.top}catch(e){return true}})();
 
 /* ---------- event catalogue ---------- */
+const TR={"EOSP (End of Sea Passage)":"Deniz seyri sona erdi","Anchored":"Demirlendi","NOR Tendered":"Hazırlık bildirimi (NOR) verildi","Anchor Aweigh":"Demir alındı",
+ "Pilot On Board (In)":"Kılavuz gemide (giriş)","First Line Ashore":"İlk halat sahilde","All Fast":"Bağlama tamamlandı","Gangway Down":"İskele indirildi",
+ "Free Pratique Granted":"Serbest pratika verildi","NOR Accepted":"NOR kabul edildi",
+ "Hold Inspection Started":"Ambar kontrolü başladı","Holds Passed":"Ambarlar kabul edildi","Initial Draft Survey Started":"İlk draft survey başladı",
+ "Initial Draft Survey Completed":"İlk draft survey tamamlandı","Final Draft Survey Started":"Son draft survey başladı","Final Draft Survey Completed":"Son draft survey tamamlandı",
+ "Ullage / Sounding Survey":"Iskandil / ullage ölçümü",
+ "Commenced Loading":"Yüklemeye başlandı","Commenced Discharging":"Tahliyeye başlandı","Stopped":"Durduruldu","Resumed":"Yeniden başlandı",
+ "Shifting Between Holds":"Ambar değiştiriliyor","Trimming Started":"Trimleme başladı","Completed Loading":"Yükleme tamamlandı","Completed Discharging":"Tahliye tamamlandı",
+ "Rain Stop":"Yağmur nedeniyle durdu","Rain Stop Ended":"Yağmur duruşu bitti","Shore Breakdown":"Liman / sahil arızası","Ship Breakdown":"Gemi arızası",
+ "Waiting Cargo":"Yük bekleniyor","Waiting Trucks / Wagons":"Kamyon / vagon bekleniyor","Shift Change / Meal Break":"Vardiya değişimi / yemek arası","Holiday / Weekend Stop":"Tatil / hafta sonu duruşu",
+ "Documents On Board":"Evraklar gemide","Pilot On Board (Out)":"Kılavuz gemide (çıkış)","Tugs Fast":"Römorkörler bağlandı","Let Go Last Line":"Son halat bırakıldı",
+ "Pilot Away":"Kılavuz ayrıldı","COSP (Commence Sea Passage)":"Deniz seyrine başlandı"};
+const trOf=l=>TR[l]||"";
 const GROUPS=[
- {name:"Varış",items:["EOSP (End of Sea Passage)","Anchored","NOR Tendered","Anchor Aweigh","Pilot On Board (In)","First Line Ashore","All Fast","Gangway Down","Free Pratique Granted","NOR Accepted"],key:["All Fast","NOR Tendered"]},
- {name:"Survey / Kontrol",items:["Hold Inspection Started","Holds Passed","Initial Draft Survey Started","Initial Draft Survey Completed","Final Draft Survey Started","Final Draft Survey Completed","Ullage / Sounding Survey"],key:[]},
- {name:"Operasyon",items:["Commenced Loading","Commenced Discharging","Stopped","Resumed","Shifting Between Holds","Trimming Started","Completed Loading","Completed Discharging"],key:["Commenced Loading","Completed Loading"]},
- {name:"Gecikme / Duruş",items:["Rain Stop","Rain Stop Ended","Shore Breakdown","Ship Breakdown","Waiting Cargo","Waiting Trucks / Wagons","Shift Change / Meal Break","Holiday / Weekend Stop"],key:[]},
- {name:"Kalkış",items:["Documents On Board","Pilot On Board (Out)","Tugs Fast","Let Go Last Line","Pilot Away","COSP (Commence Sea Passage)"],key:[]}
+ {name:"Varış · Arrival",items:["EOSP (End of Sea Passage)","Anchored","NOR Tendered","Anchor Aweigh","Pilot On Board (In)","First Line Ashore","All Fast","Gangway Down","Free Pratique Granted","NOR Accepted"],key:["All Fast","NOR Tendered"]},
+ {name:"Survey / Kontrol · Inspection",items:["Hold Inspection Started","Holds Passed","Initial Draft Survey Started","Initial Draft Survey Completed","Final Draft Survey Started","Final Draft Survey Completed","Ullage / Sounding Survey"],key:[]},
+ {name:"Operasyon · Operations",items:["Commenced Loading","Commenced Discharging","Stopped","Resumed","Shifting Between Holds","Trimming Started","Completed Loading","Completed Discharging"],key:["Commenced Loading","Completed Loading"]},
+ {name:"Gecikme / Duruş · Delays",items:["Rain Stop","Rain Stop Ended","Shore Breakdown","Ship Breakdown","Waiting Cargo","Waiting Trucks / Wagons","Shift Change / Meal Break","Holiday / Weekend Stop"],key:[]},
+ {name:"Kalkış · Departure",items:["Documents On Board","Pilot On Board (Out)","Tugs Fast","Let Go Last Line","Pilot Away","COSP (Commence Sea Passage)"],key:[]}
 ];
 
 /* ---------- storage ---------- */
@@ -469,7 +484,7 @@ setInterval(tick,15000);tick();
 /* ---------- tabs ---------- */
 let TAB="fleet";
 function go_(t){go(t)}
-function go(t){if(!isCap()&&!["ev","tally"].includes(t))t="ev";TAB=t;
+function go(t){if(!isCap()&&!["ev","log","tally"].includes(t))t="ev";TAB=t;
   $$("nav.tabs button").forEach(x=>x.classList.toggle("on",x.dataset.tab===t));
   $$("main section").forEach(s=>s.classList.toggle("on",s.id==="tab-"+t));
   renderTab();window.scrollTo(0,0)}
@@ -485,8 +500,8 @@ function renderHeader(){const s=cur(),v=vesselOf(s);
   $("#hdrVessel").textContent=s?[v.name,s.voyage.port,fD(span(s)[0])].filter(Boolean).join(" · "):"Gemi seçilmedi — dokunun";
   const wb=$("#whoBtn");wb.hidden=!SES;
   if(SES){wb.textContent=(isCap()?"⚓ ":"")+mName(v||{members:[]},me());wb.classList.remove("none")}
-  const nb=$$("nav.tabs button");nb.forEach(b=>b.hidden=!isCap()&&!["ev","tally"].includes(b.dataset.tab));
-  $("nav.tabs .in").style.gridTemplateColumns=isCap()?"":"1fr 1fr"}
+  const nb=$$("nav.tabs button");nb.forEach(b=>b.hidden=!isCap()&&!["ev","log","tally"].includes(b.dataset.tab));
+  $("nav.tabs .in").style.gridTemplateColumns=isCap()?"":"repeat(3,1fr)"}
 $("#whoBtn").onclick=()=>accountSheet();
 
 /* pick who is entering data on this phone (per vessel) */
@@ -658,8 +673,8 @@ function renderTaps(){const s=cur();
   if(!s){$("#tapGroups").innerHTML=gate();wireGate();return}
   const sb=headCard(s,"evSend");
   $("#tapGroups").innerHTML=sb+GROUPS.map((g,gi)=>`<h2>${esc(g.name)}</h2><div class="grid">${
-    g.items.map(l=>{const e=lastOf(s,l);return `<button class="tap${g.key.includes(l)?" key":""}${e?" done":""}" data-l="${esc(l)}"><b>${esc(l)}</b><i>${e?fD(e.t).slice(0,5)+" "+fT(e.t):"Bas → saat kaydet"}</i></button>`}).join("")
-  }${gi===GROUPS.length-1?`<button class="tap custom" id="customTap"><b>+ Diğer olay</b></button>`:""}</div>`).join("");
+    g.items.map(l=>{const e=lastOf(s,l);return `<button class="tap${g.key.includes(l)?" key":""}${e?" done":""}" data-l="${esc(l)}"><span style="display:flex;flex-direction:column;gap:2px"><b>${esc(trOf(l)||l)}</b>${trOf(l)?`<em>${esc(l)}</em>`:""}</span><i>${e?fD(e.t).slice(0,5)+" "+fT(e.t):"Bas / Tap"}</i></button>`}).join("")
+  }${gi===GROUPS.length-1?`<button class="tap custom" id="customTap"><b>+ Diğer olay</b><em>Other event</em></button>`:""}</div>`).join("");
   $$(".tap[data-l]").forEach(b=>b.onclick=()=>stamp(b.dataset.l));
   $("#customTap").onclick=()=>openEditor(null,true);
   wireHead("evSend");
@@ -668,7 +683,7 @@ function stamp(label){const s=cur();if(!s)return;
   const e={id:uid(),t:Date.now(),label,note:"",photos:[],by:me()};
   s.events.push(e);save();renderHeader();renderTab();
   if(navigator.vibrate)try{navigator.vibrate(30)}catch(x){}
-  toast(`<span><b>${fT(e.t)}</b> ${esc(label)}</span>`,[
+  toast(`<span><b>${fT(e.t)}</b> ${esc(trOf(label)||label)}${trOf(label)?` <span style="opacity:.7">· ${esc(label)}</span>`:""}</span>`,[
     ["Not / Foto",()=>openEditor(e.id)],
     ["Geri al",()=>{s.events=s.events.filter(x=>x.id!==e.id);save();renderTab()}]]);
 }
@@ -686,11 +701,12 @@ function renderLog(){const s=cur();
   if(!s){$("#logWrap").innerHTML=gate();wireGate();return}
   const ev=sorted(s);let html="",lastDay="";
   ev.forEach(e=>{const d=fD(e.t);if(d!==lastDay){lastDay=d;html+=`<li class="daysep">${d} · ${fDay(e.t)}</li>`}
-    html+=`<li><div class="t">${fT(e.t)}<small>${d.slice(0,5)}</small></div><div class="e"><b>${esc(e.label)}</b>${e.by?`<span style="color:var(--muted);font-size:12px"> · ${esc(mName(vesselOf(s),e.by))}</span>`:""}${e.note?`<p>${esc(e.note)}</p>`:""}${e.photos.length?`<div class="thumbs">${e.photos.map(p=>`<img src="${p}" alt="">`).join("")}</div>`:""}</div><button class="btn sm ghost" data-ed="${e.id}">Düzenle</button></li>`});
-  $("#logWrap").innerHTML=`<div class="row" style="justify-content:space-between"><h2 style="margin:4px 0 8px">${esc(vesselOf(s).name)} · ${esc(s.voyage.port||"")}</h2><button class="btn sm ghost" id="addManual">+ Elle olay ekle</button></div>
+    html+=`<li><div class="t">${fT(e.t)}<small>${d.slice(0,5)}</small></div><div class="e"><b>${esc(trOf(e.label)||e.label)}</b>${trOf(e.label)?`<span style="color:var(--muted);font-size:12.5px"> · ${esc(e.label)}</span>`:""}${e.by?`<span style="color:var(--muted);font-size:12px"> · ${esc(mName(vesselOf(s),e.by))}</span>`:""}${e.note?`<p>${esc(e.note)}</p>`:""}${e.photos.length?`<div class="thumbs">${e.photos.map(p=>`<img src="${p}" alt="">`).join("")}</div>`:""}</div>${isCap()||e.by===me()?`<button class="btn sm ghost" data-ed="${e.id}">Düzenle</button>`:"<span></span>"}</li>`});
+  $("#logWrap").innerHTML=`${headCard(s,"lgSend")}<div class="row" style="justify-content:space-between"><h2 style="margin:4px 0 8px">Olay kaydı · Event log</h2><button class="btn sm pri" id="addManual">+ Elle olay ekle</button></div>
     <ul class="log">${html||`<li class="empty">Henüz olay yok. “Olay Bas” sekmesinde bir düğmeye dokunun veya geçmiş olayı elle ekleyin.</li>`}</ul>`;
   $("#addManual").onclick=()=>openEditor(null,true);
   $$("[data-ed]").forEach(b=>b.onclick=()=>openEditor(b.dataset.ed));
+  wireHead("lgSend");
 }
 
 /* ---------- photo compression ---------- */
@@ -703,6 +719,7 @@ function compress(file){return new Promise((res,rej)=>{
 /* ---------- event editor ---------- */
 function openEditor(id,isNew){const s=cur();if(!s)return;
   const orig=id?s.events.find(e=>e.id===id):null;
+  if(orig&&!isCap()&&orig.by!==me())return toast("Sadece kendi kayıtlarınızı düzenleyebilirsiniz");
   // manual entry in a past SOF defaults to that SOF's last event time
   const lastT=s.events.length?sorted(s).slice(-1)[0].t:Date.now();
   const e=orig?JSON.parse(JSON.stringify(orig)):{id:uid(),t:(Date.now()-lastT>3*864e5)?lastT:Date.now(),label:"",note:"",photos:[],by:me()};
@@ -711,7 +728,7 @@ function openEditor(id,isNew){const s=cur();if(!s)return;
     host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Olay">
       <h3>${isNew?"Yeni olay":"Olayı düzenle"}</h3>
       <label class="field">Olay<input id="edL" list="evlist" value="${esc(e.label)}" placeholder="Örn. Hatch covers opened"></label>
-      <datalist id="evlist">${GROUPS.flatMap(g=>g.items).map(l=>`<option value="${esc(l)}">`).join("")}</datalist>
+      <datalist id="evlist">${GROUPS.flatMap(g=>g.items).map(l=>`<option value="${esc(l)}" label="${esc(trOf(l))}">${esc(trOf(l))}</option>`).join("")}</datalist>
       <div class="row"><label class="field" style="flex:1">Tarih ve saat<input type="datetime-local" id="edT" value="${fLocalInput(e.t)}"></label>
       <button class="btn sm ghost" id="edNow" style="align-self:flex-end">Şimdi</button></div>
       <label class="field">Açıklama<textarea id="edN" rows="3" placeholder="Ayrıntı, kişi, sebep…">${esc(e.note)}</textarea></label>
@@ -1197,7 +1214,7 @@ function importSnapshot(o){const s=R.sofs.find(x=>x.id===o.sof);if(!s)throw{msg:
 /* ---------- account ---------- */
 function accountSheet(){const host=$("#sheetHost");const cap=isCap();
   host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Hesap"><h3>${esc(mName(vesselOf(cur())||{members:[]},me()))}</h3>
-    <p class="note" style="margin:0">${cap?"Kaptan · tüm bölümlere erişim":"Personel · Olay Bas ve Tally"}</p>
+    <p class="note" style="margin:0">${cap?"Kaptan · tüm bölümlere erişim":"Personel · Olay Bas, Kayıt ve Tally"}</p>
     ${cap?`<div class="lcard" style="box-shadow:none;padding:0"><h3 style="font-size:16px">Kaptan şifresini değiştir</h3>
       <input type="password" id="aO" class="pwin" placeholder="Mevcut şifre" autocomplete="current-password"><input type="password" id="aN" class="pwin" placeholder="Yeni şifre (en az 4)" autocomplete="new-password">
       <p class="err" id="aE" hidden></p><button class="btn ghost" id="aS" style="align-self:flex-start">Şifreyi değiştir</button></div>`:`<button class="btn dark" id="aSend">Kayıtlarımı gönder</button><button class="btn ghost" data-newpack>Yeni liman / paket al</button>
@@ -1252,7 +1269,7 @@ function renderLogin(){const L=$("#login");L.hidden=false;
       <label class="field">Şifre<input id="sP1" type="password" autocomplete="new-password"></label>
       <label class="field">Şifre (tekrar)<input id="sP2" type="password" autocomplete="new-password"></label>
       <p class="err" id="sE" hidden></p><button class="btn pri" id="sGo">Kur ve giriş yap</button>
-      <p class="note" style="margin:0">Kaptan tüm bölümlere erişir. Personel, sizin belirlediğiniz şifreyle yalnızca Olay Bas ve Tally bölümlerine girer.</p></div><button class="lk" id="fBack2">Geri</button>`}
+      <p class="note" style="margin:0">Kaptan tüm bölümlere erişir. Personel, sizin belirlediğiniz şifreyle yalnızca Olay Bas, Kayıt ve Tally bölümlerine girer.</p></div><button class="lk" id="fBack2">Geri</button>`}
   else if(LV==="forgot"){body=`<div class="lcard"><h3>Kaptan şifresini yenile</h3>
       <label class="field">Kurtarma kodu<input id="fC" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX"></label>
       <label class="field">Yeni şifre<input id="fP" type="password" autocomplete="new-password"></label>
