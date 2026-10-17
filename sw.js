@@ -1,7 +1,7 @@
 // DG SOF Defteri – çevrimdışı önbellek. Uygulamayı güncellediğinizde VERSION değerini artırın.
-const VERSION = "dg-sof-v13";
+const VERSION = "dg-sof-v14";
 const FBV = "https://www.gstatic.com/firebasejs/11.0.2/";
-const FBJS = ["firebase-app.js", "firebase-auth.js", "firebase-firestore.js"].map(f => FBV + f);
+const FBJS = ["firebase-app.js", "firebase-auth.js"].map(f => FBV + f);
 const JSQR = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"; // yedek QR okuyucu (iPhone için)
 const CORE = ["./", "index.html", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-192.png", "icons/maskable-512.png",

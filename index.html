@@ -358,8 +358,8 @@ nav.tabs button{font-size:11px;padding-inline:2px}
 <script type="module">
 let done=false,last=null;
 for(const V of ["11.0.2","10.14.1"]){const B="https://www.gstatic.com/firebasejs/"+V+"/";
-  try{const [a,au,fs]=await Promise.all([import(B+"firebase-app.js"),import(B+"firebase-auth.js"),import(B+"firebase-firestore.js")]);
-    window.FBX={a,au,fs,V};done=true;window.dispatchEvent(new Event("fbx-ready"));break}catch(e){last=e}}
+  try{const [a,au]=await Promise.all([import(B+"firebase-app.js"),import(B+"firebase-auth.js")]);
+    window.FBX={a,au,V};done=true;window.dispatchEvent(new Event("fbx-ready"));break}catch(e){last=e}}
 if(!done){window.FBX_ERR=last;window.dispatchEvent(new Event("fbx-fail"))}
 </script>
 <script>
@@ -782,7 +782,7 @@ function headCard(s,sendId){const v=vesselOf(s),op=s.voyage.op==="Discharging"?"
     ${isCap()?"":`<div class="meta"><span>${esc(mName(v,me()))} · bu tally’de ${mineN} kaydınız var</span></div>
     ${online()?"":`<div class="row"><button class="btn pri" id="${sendId}">Kayıtlarımı gönder</button><button class="btn ghost" data-newpack>Yeni liman / paket al</button></div>`}`}
     ${online()?`<div class="row" style="align-items:center"><span data-syncline style="flex:1;min-width:0;font-size:13.5px">${esc(syncText())}</span><button class="btn sm ghost" data-syncnow>Şimdi eşitle</button></div>`:""}</div>`}
-function wireHead(sendId){const b=$("#"+sendId);if(b)b.onclick=()=>sendSheet();$$("[data-syncnow]").forEach(x=>x.onclick=()=>{if(SY.fatal)return repairSync();SY.err="";pushNow();updateSyncUI()});renderSyncButtons();$$("[data-newpack]").forEach(x=>x.onclick=()=>staffNewPack())}
+function wireHead(sendId){const b=$("#"+sendId);if(b)b.onclick=()=>sendSheet();$$("[data-syncnow]").forEach(x=>x.onclick=()=>syncNow());renderSyncButtons();$$("[data-newpack]").forEach(x=>x.onclick=()=>staffNewPack())}
 function staffNewPack(){const host=$("#sheetHost");const use=o=>{if(o.k!=="pack")throw{msg:"Bu bir personel kaydı, paket değil. Kaptanın Rapor → Personel paketi hazırla ekranındaki kodu kullanın."};staffConfirmPack(o)};
   host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Yeni paket"><h3>Yeni liman / paket al</h3>
     <p class="note" style="margin:0">Kaptan telefonunda yeni SOF’u açıp <b>Rapor → Personel paketi hazırla</b>’ya basmalı.</p>
@@ -1231,52 +1231,86 @@ function importSnapshot(o){const s=R.sofs.find(x=>x.id===o.sof);if(!s)throw{msg:
   return `${esc(sofTitle(s))}${s.id!==R.cur?" (aktif olmayan SOF)":""} ← ${esc(mName(vesselOf(s),o.by))}: ${evs?evs.length+" olay, ":""}${ents.length} sayım (${num(ents.reduce((a,b)=>a+(+b.qty||0),0))} adet) alındı`}
 
 /* =====================================================================
-   ONLINE SYNC (Firebase). Local data (R) stays the source the UI reads;
-   this layer pushes local changes in batches and merges remote changes.
+   ONLINE SYNC — Firebase Auth (SDK) + Firestore over plain HTTPS (REST).
+   No Firestore SDK: the app keeps its own durable copy (R) and polls for changes.
    ===================================================================== */
 const FBCONF={apiKey:"AIzaSyDjEAejLZVS3DJsKX_5Ty8fHu028r4LlYY",authDomain:"dg-sof.firebaseapp.com",projectId:"dg-sof",
   storageBucket:"dg-sof.firebasestorage.app",messagingSenderId:"129989605648",appId:"1:129989605648:web:491792601b187514f00d95"};
 const USERDOM="dg-sof.app"; // staff log in with a username; it becomes username@dg-sof.app
+const FSNAME="projects/"+FBCONF.projectId+"/databases/(default)/documents";
+const FSBASE="https://firestore.googleapis.com/v1/"+FSNAME;
 let FB=null,LOGINMODE="online",SIGNUP=false;
-const SY={unsubs:[],activeSub:null,pushT:null,pushing:false,awaiting:false,last:null,err:"",paused:false};
+const SY={pollT:null,pushT:null,pushing:false,polling:false,awaiting:false,last:null,lastPoll:null,err:"",paused:false,fatal:false,lastCur:undefined};
 try{SY.paused=localStorage.getItem("sof-paused")==="1"}catch(e){}
 const online=()=>!!(SES&&SES.online&&FB);
 function fbWait(ms){return new Promise(res=>{if(window.FBX)return res(true);if(window.FBX_ERR)return res(false);
   const t=setTimeout(()=>res(false),ms);window.addEventListener("fbx-ready",()=>{clearTimeout(t);res(true)},{once:true});window.addEventListener("fbx-fail",()=>{clearTimeout(t);res(false)},{once:true})})}
-function fbInit(){if(FB||!window.FBX)return FB;const {a,au,fs}=window.FBX;const app=a.initializeApp(FBCONF);let fdb;
-  // memory cache only: the app keeps its own durable copy, and Firestore's IndexedDB cache caused "Unexpected state" errors on phones
-  try{fdb=fs.initializeFirestore(app,{localCache:fs.memoryLocalCache()})}catch(e){fdb=fs.getFirestore(app)}
+function fbInit(){if(FB||!window.FBX)return FB;const {a,au}=window.FBX;const app=a.initializeApp(FBCONF);FB={a,au,app,auth:au.getAuth(app)};
+  // remove caches left by the earlier Firestore-SDK version
   try{indexedDB.databases&&indexedDB.databases().then(l=>l.forEach(d=>{if(d.name&&d.name.startsWith("firestore/"))indexedDB.deleteDatabase(d.name)}))}catch(e){}
-  FB={a,au,fs,app,auth:au.getAuth(app),db:fdb};return FB}
+  return FB}
 const toEmail=u=>{u=String(u||"").trim();return u.includes("@")?u:u.toLowerCase().replace(/\s+/g,"")+"@"+USERDOM};
 function authMsg(e){const c=(e&&e.code)||"";return({"auth/invalid-credential":"Kullanıcı adı / e-posta veya şifre yanlış","auth/wrong-password":"Şifre yanlış","auth/user-not-found":"Bu kullanıcı bulunamadı",
   "auth/invalid-login-credentials":"Kullanıcı adı / e-posta veya şifre yanlış","auth/too-many-requests":"Çok fazla deneme yapıldı. Birkaç dakika bekleyin.",
   "auth/network-request-failed":"İnternet bağlantısı yok. Giriş için bir kez internet gerekir.","auth/email-already-in-use":"Bu kullanıcı adı / e-posta zaten kullanılıyor",
   "auth/weak-password":"Şifre en az 6 karakter olmalı","auth/invalid-email":"Geçersiz kullanıcı adı veya e-posta","auth/missing-password":"Şifreyi yazın",
-  "auth/operation-not-allowed":"Firebase’de Email/Password girişi açık değil","permission-denied":"Sunucu izin vermedi. Güvenlik kuralları yüklenmemiş olabilir."})[c]||("Hata: "+(c||(e&&e.message)||e))}
+  "auth/operation-not-allowed":"Firebase’de Email/Password girişi açık değil",
+  "permission-denied":"Sunucu izin vermedi. Firestore güvenlik kuralları yüklenmemiş olabilir.","unauthenticated":"Oturum süresi doldu, yeniden giriş yapın.",
+  "offline":"İnternet yok","not-found":"Veritabanı bulunamadı. Firestore Database oluşturulmuş mu?"})[c]||("Hata: "+(c||"")+" "+((e&&e.message)||""))}
 function hsh(o){const s=JSON.stringify(o)||"";let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return(h>>>0).toString(36)+s.length.toString(36)}
 const clean=o=>JSON.parse(JSON.stringify(o));
-const SYN=()=>{const s=R.sync||(R.sync={});s.vh=s.vh||{};s.sof=s.sof||{};s.ev=s.ev||{};s.te=s.te||{};s.seen=s.seen||{};return s};
+const SYN=()=>{const s=R.sync||(R.sync={});s.vh=s.vh||{};s.sof=s.sof||{};s.ev=s.ev||{};s.te=s.te||{};s.seen=s.seen||{};s.lu=s.lu||{};s.dead=s.dead||{};return s};
 const vPay=v=>({id:v.id,name:v.name||"",imo:v.imo||"",flag:v.flag||"",holds:v.holds||[],activeSof:v.activeSof||null,
   members:(v.members||[]).map(m=>({id:m.id,name:m.name||"",role:m.role||"",account:m.account||"",uid:m.uid||""}))});
 const metaOf=s=>clean({vesselId:s.vesselId,created:s.created,voyage:s.voyage,holds:s.holds,tallies:s.tallies,entries:s.entries});
 const evPay=e=>({label:e.label||"",t:e.t||0,note:e.note||"",by:e.by||"cap"});
 const evHash=e=>hsh(evPay(e));
-const fpath=(...p)=>FB.fs.doc(FB.db,"fleets",SES.fleet,...p);
-const fcol=(...p)=>FB.fs.collection(FB.db,"fleets",SES.fleet,...p);
 const sofById=id=>R.sofs.find(s=>s.id===id);
 let bytesSent=0;try{bytesSent=+localStorage.getItem("sof-bytes")||0}catch(e){}
-const addBytes=o=>{bytesSent+=JSON.stringify(o).length+120;try{localStorage.setItem("sof-bytes",String(bytesSent))}catch(e){}};
+const addBytes=n=>{bytesSent+=n;try{localStorage.setItem("sof-bytes",String(bytesSent))}catch(e){}};
+
+/* ---- Firestore REST helpers ---- */
+function toV(v){if(v===null||v===undefined)return{nullValue:null};if(typeof v==="boolean")return{booleanValue:v};
+  if(typeof v==="number")return Number.isInteger(v)&&Math.abs(v)<9e15?{integerValue:String(v)}:{doubleValue:v};
+  if(typeof v==="string")return{stringValue:v};if(Array.isArray(v))return{arrayValue:{values:v.map(toV)}};
+  const f={};Object.keys(v).forEach(k=>{if(v[k]!==undefined)f[k]=toV(v[k])});return{mapValue:{fields:f}}}
+function fromV(x){if(!x)return null;if("nullValue" in x)return null;if("booleanValue" in x)return x.booleanValue;if("integerValue" in x)return Number(x.integerValue);
+  if("doubleValue" in x)return x.doubleValue;if("stringValue" in x)return x.stringValue;if("timestampValue" in x)return x.timestampValue;
+  if("arrayValue" in x)return(x.arrayValue.values||[]).map(fromV);if("mapValue" in x)return fromFields(x.mapValue.fields);return null}
+const fromFields=f=>{const o={};Object.keys(f||{}).forEach(k=>o[k]=fromV(f[k]));return o};
+const toFields=o=>toV(o).mapValue.fields;
+const docOf=d=>Object.assign(fromFields(d.fields),{_id:d.name.split("/").pop()});
+const fleetPath=(...p)=>["fleets",SES.fleet,...p].join("/");
+const tsKey=s=>{if(!s)return"";const m=String(s).match(/^([^.Z]*)(?:\.(\d+))?Z$/);return m?m[1]+"."+((m[2]||"")+"000000000").slice(0,9):String(s)};
+async function api(method,path,body){const u=FB.auth.currentUser;if(!u)throw{code:"unauthenticated"};
+  const send=async force=>{const tok=await u.getIdToken(force);return fetch(FSBASE+path+"?key="+FBCONF.apiKey,{method,headers:{"Authorization":"Bearer "+tok,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined})};
+  let r;try{r=await send(false);if(r.status===401)r=await send(true)}catch(e){throw{code:"offline"}}
+  const txt=await r.text();addBytes(txt.length+(body?JSON.stringify(body).length:0)+400);
+  if(r.status===404&&method==="GET")return null;
+  let j=null;try{j=txt?JSON.parse(txt):null}catch(e){}
+  if(!r.ok){const st=(j&&j[0]&&j[0].error||j&&j.error||{});const s=st.status||"";
+    throw{code:s==="PERMISSION_DENIED"?"permission-denied":s==="UNAUTHENTICATED"?"unauthenticated":s==="NOT_FOUND"?"not-found":"http-"+r.status,message:st.message||""}}
+  return j}
+async function getDocR(path){const j=await api("GET","/"+path);return j&&j.fields?docOf(j):null}
+async function queryR(parent,coll,w){const sq={from:[{collectionId:coll}]};
+  if(w)sq.where={fieldFilter:{field:{fieldPath:w.f},op:w.op,value:w.ts?{timestampValue:w.v}:toV(w.v)}};
+  const j=await api("POST",(parent?"/"+parent:"")+":runQuery",{structuredQuery:sq});
+  return(j||[]).filter(x=>x.document).map(x=>docOf(x.document))}
+async function commitR(ops){for(let i=0;i<ops.length;i+=400){
+  const writes=ops.slice(i,i+400).map(o=>o.t==="del"?{delete:FSNAME+"/"+o.path}:{update:{name:FSNAME+"/"+o.path,fields:toFields(clean(o.data))},updateTransforms:[{fieldPath:"u",setToServerValue:"REQUEST_TIME"}]});
+  await api("POST",":commit",{writes})}}
+const sinceQ=k=>{const v=SYN().lu[k];return v?{f:"u",op:"GREATER_THAN",v,ts:true}:null}; // a commit is atomic, so everything at time v was already received
+const bump=(k,u)=>{const S=SYN();if(u&&(!S.lu[k]||tsKey(u)>tsKey(S.lu[k])))S.lu[k]=u};
 
 /* ---- sign in / out ---- */
 async function authChanged(u){if(SIGNUP)return;
   if(u)return onlineSignedIn(u);
   stopSync();if(SES&&SES.online){SES=null;saveSes()}
   const ls=loadSes();if(ls){SES=ls;enterApp()}else renderLogin()}
-async function onlineSignedIn(u){const {fs}=FB;let p=null;
-  try{const sn=await fs.getDoc(fs.doc(FB.db,"users",u.uid));if(sn.exists())p=sn.data()}catch(e){}
+async function onlineSignedIn(u){let p=null,why="";
+  try{p=await getDocR("users/"+u.uid)}catch(e){why=authMsg(e)}
   if(!p){try{p=JSON.parse(localStorage.getItem("sof-prof-"+u.uid)||"null")}catch(e){}}
-  if(!p){toast("Bu kullanıcının profili yok. Kaptan, Üyeler bölümünden bu kişiye “Hesap aç” yapmalı.");try{await FB.au.signOut(FB.auth)}catch(e){}return}
+  if(!p){toast(why&&why!=="İnternet yok"?why:"Bu kullanıcının profili yok. Kaptan, Üyeler bölümünden bu kişiye “Hesap aç” yapmalı.");try{await FB.au.signOut(FB.auth)}catch(e){}return}
   try{localStorage.setItem("sof-prof-"+u.uid,JSON.stringify(p))}catch(e){}
   if(p.role==="staff"&&R.example){R=blankRoot();normalize(R)}
   SES={role:p.role==="cap"?"cap":"staff",id:p.role==="cap"?undefined:p.memberId,uid:u.uid,fleet:p.fleet,online:true,name:p.name||"",email:u.email};
@@ -1285,42 +1319,41 @@ async function onlineSignedIn(u){const {fs}=FB;let p=null;
   if(SES.role==="cap"&&!R.sync.migrated)setTimeout(migrateSheet,400)}
 async function onlineLogout(){stopSync();try{await FB.au.signOut(FB.auth)}catch(e){}SES=null;saveSes();$("#sheetHost").innerHTML="";renderLogin()}
 
-/* ---- listeners ---- */
-function stopSync(){SY.unsubs.forEach(f=>{try{f()}catch(e){}});SY.unsubs=[];stopActive();clearTimeout(SY.pushT)}
-function stopActive(){(SY.activeUnsubs||[]).forEach(f=>{try{f()}catch(e){}});SY.activeUnsubs=[];SY.activeSub=null}
-function startSync(){stopSync();const {fs}=FB;applyNet();
-  SY.unsubs.push(fs.onSnapshot(fpath("state","vessels"),sn=>applyVessels(sn),e=>syncErr(e)));
-  if(isCap())SY.unsubs.push(fs.onSnapshot(fcol("sofs"),qs=>applySofs(qs),e=>syncErr(e)));
-  subscribeActive();schedulePush(3000);updateSyncUI()}
-function syncErr(e){const m=String((e&&e.message)||e||"");
-  if(/INTERNAL ASSERTION|Unexpected state|exclusive access|persistence layer/i.test(m)){SY.fatal=true;SY.err="Bağlantı önbelleği bozuldu. “Onar”a basın; kayıtlarınız silinmez."}
-  else SY.err=authMsg(e);updateSyncUI();renderSyncButtons()}
-function renderSyncButtons(){$$("[data-syncnow]").forEach(b=>{b.textContent=SY.fatal?"Onar":"Şimdi eşitle";b.classList.toggle("pri",!!SY.fatal);b.classList.toggle("ghost",!SY.fatal)})}
-// rebuild the Firebase cache: local records (separate storage) stay; everything is re-sent (sends are idempotent)
-async function repairSync(){const b=$$("[data-syncnow]");b.forEach(x=>{x.disabled=true;x.textContent="Onarılıyor…"});
-  const S=SYN();R.sync={migrated:S.migrated,vh:{},sof:{},ev:{},te:{},seen:S.seen||{}};
+/* ---- polling (pull) ---- */
+function startSync(){stopSync();SY.lastCur=R.cur;pollNow().then(()=>schedulePush(1500));
+  SY.pollT=setInterval(()=>{if(document.visibilityState==="visible")pollNow()},isCap()?20000:45000);updateSyncUI()}
+function stopSync(){clearInterval(SY.pollT);clearTimeout(SY.pushT);SY.pollT=null;SY.pushT=null}
+function subscribeActive(){if(!online())return;if(R.cur!==SY.lastCur){SY.lastCur=R.cur;setTimeout(pollNow,50)}}
+function syncNow(){SY.err="";SY.fatal=false;pushNow().then(pollNow);updateSyncUI()}
+const viewHash=()=>{const c=cur();return hsh([R.cur,R.vessels.map(vPay),R.sofs.map(x=>[x.id,metaOf(x)]),c?[c.events.map(evPay),c.tallyEntries.length,c.tallyEntries.reduce((n,e)=>n+(+e.qty||0),0)]:0])};
+async function pollNow(){if(!online()||SY.polling||SY.paused)return;SY.polling=true;const S=SYN();let before="";
+  try{before=viewHash();
+    const st=await queryR(fleetPath(),"state",sinceQ("state"));
+    const vd=st.find(d=>d._id==="vessels");if(vd){applyVessels(vd.list||[]);bump("state",vd.u)}
+    if(isCap()){const ss=await queryR(fleetPath(),"sofs",sinceQ("sofs"));applySofs(ss);ss.forEach(d=>bump("sofs",d.u))}
+    else if(R.cur){const sid=R.cur;
+      if(!S.seen[sid]){const d=await getDocR(fleetPath("sofs",sid));if(d){applySofMeta(d,sid);bump("sofs",d.u)}await staffFetchOwn(sid)}
+      else{const ss=await queryR(fleetPath(),"sofs",sinceQ("sofs"));ss.forEach(d=>{if(d._id===R.cur||sofById(d._id))applySofMeta(d,d._id);bump("sofs",d.u)})}}
+    if(isCap()&&R.cur&&sofById(R.cur)){const sid=R.cur;
+      const ev=await queryR(fleetPath("sofs",sid),"events",sinceQ("ev:"+sid));applyEvents(ev,sid);ev.forEach(d=>bump("ev:"+sid,d.u));
+      const tb=await queryR(fleetPath("sofs",sid),"tally",sinceQ("tb:"+sid));applyTally(tb,sid);tb.forEach(d=>bump("tb:"+sid,d.u))}
+    SY.err="";SY.lastPoll=Date.now();const after=viewHash();if(after!==before){save();renderHeader();renderTab()}else save()
+  }catch(e){syncErr(e)}
+  SY.polling=false;updateSyncUI()}
+function renderHeader0(){try{const s=cur(),v=vesselOf(s);$("#hdrVessel").textContent=s?[v.name,s.voyage.port,fD(span(s)[0])].filter(Boolean).join(" · "):"Gemi seçilmedi — dokunun"}catch(e){}}
+function syncErr(e){SY.err=authMsg(e);if(e&&e.code==="offline")SY.err="";updateSyncUI()}
+function renderSyncButtons(){}
+async function repairSync(){const S=SYN();R.sync={migrated:S.migrated,vh:{},sof:{},ev:{},te:{},seen:{},lu:{},dead:{}};
   const v=JSON.parse(JSON.stringify(R));
   await new Promise(res=>{try{const t=db.transaction(ST,"readwrite");t.objectStore(ST).put(v,"state");t.oncomplete=res;t.onerror=res}catch(e){try{localStorage.setItem("sof-state",JSON.stringify(v))}catch(x){}res()}});
-  try{stopSync();await FB.fs.terminate(FB.db)}catch(e){}
-  try{indexedDB.deleteDatabase("firestore/[DEFAULT]/"+FBCONF.projectId+"/main")}catch(e){}
   location.reload()}
-window.addEventListener("unhandledrejection",ev=>{const m=String((ev.reason&&ev.reason.message)||ev.reason||"");if(/INTERNAL ASSERTION/i.test(m)&&online())syncErr(ev.reason)});
-window.addEventListener("error",ev=>{const m=String(ev.message||"");if(/INTERNAL ASSERTION/i.test(m)&&online())syncErr(m)});
-function subscribeActive(){if(!online())return;const sid=R.cur;if(SY.activeSub===sid)return;stopActive();SY.activeSub=sid;if(!sid)return;const {fs}=FB;
-  if(isCap()){
-    SY.activeUnsubs.push(fs.onSnapshot(fcol("sofs",sid,"events"),qs=>applyEvents(qs,sid),e=>syncErr(e)));
-    SY.activeUnsubs.push(fs.onSnapshot(fcol("sofs",sid,"tally"),qs=>applyTally(qs,sid),e=>syncErr(e)));
-  }else{
-    SY.activeUnsubs.push(fs.onSnapshot(fpath("sofs",sid),sn=>applySofDoc(sn,sid),e=>syncErr(e)));
-    staffFetchOwn(sid);
-  }}
-function applyVessels(sn){if(!sn.exists())return;const list=(sn.data().list)||[];const S=SYN();
+function applyVessels(list){const S=SYN();
   if(!isCap()){const prev=R.cur;R.vessels=list.map(v=>Object.assign({},v));
     const mv=R.vessels.find(v=>(v.members||[]).some(m=>m.id===SES.id));
     if(mv&&mv.activeSof&&mv.activeSof!==R.cur){
       if(!sofById(mv.activeSof))R.sofs.push(normalizeSof({id:mv.activeSof,vesselId:mv.id,created:Date.now(),voyage:blankVoy(),holds:[],tallies:[],entries:[],events:[],tallyEntries:[]}));
-      R.cur=mv.activeSof;if(prev)setTimeout(()=>toast("Kaptan yeni bir tally açtı. Kayıtlarınız artık yeni tally’ye gidiyor."),300)}
-    save();renderHeader();renderTab();return}
+      R.cur=mv.activeSof;SY.lastCur=R.cur;if(prev)setTimeout(()=>toast("Kaptan yeni bir tally açtı. Kayıtlarınız artık yeni tally’ye gidiyor."),300)}
+    return}
   const rem={};list.forEach(v=>rem[v.id]=v);const out=[];
   R.vessels.forEach(lv=>{const syn=S.vh[lv.id],lh=hsh(vPay(lv)),pend=syn!==lh;
     if(rem[lv.id]){const rv=rem[lv.id],rh=hsh(vPay(rv));
@@ -1331,84 +1364,68 @@ function applyVessels(sn){if(!sn.exists())return;const list=(sn.data().list)||[]
     else if(syn!==undefined&&!pend){delete S.vh[lv.id]}
     else out.push(lv)});
   Object.values(rem).forEach(rv=>{out.push(Object.assign({},rv));S.vh[rv.id]=hsh(vPay(rv))});
-  R.vessels=out;save();renderHeader();renderTab()}
+  R.vessels=out}
 function normalizeSof(s){s.voyage=Object.assign(blankVoy(),s.voyage||{});s.holds=s.holds||[];s.tallies=s.tallies||[];s.entries=s.entries||[];s.events=s.events||[];s.tallyEntries=s.tallyEntries||[];return s}
-function applySofs(qs){const S=SYN();let ch=false;
-  qs.docChanges().forEach(c=>{const id=c.doc.id,l=sofById(id);
-    if(c.type==="removed"){if(l&&S.sof[id]===hsh(metaOf(l))){R.sofs=R.sofs.filter(x=>x.id!==id);delete S.sof[id];if(R.cur===id)R.cur=null;ch=true}return}
-    const m=c.doc.data();
-    if(!l){R.sofs.push(normalizeSof(Object.assign({id},m,{events:[],tallyEntries:[]})));S.sof[id]=hsh(metaOf(sofById(id)));ch=true}
-    else if(S.sof[id]===hsh(metaOf(l))||S.sof[id]===undefined&&hsh(metaOf(l))===hsh(clean(m))){Object.assign(l,m);normalizeSof(l);S.sof[id]=hsh(metaOf(l));ch=true}});
-  if(ch){save();renderHeader();renderTab()}}
-function applySofDoc(sn,sid){const S=SYN();if(!sn.exists()){toast("Bu tally kaptan tarafından silinmiş.");return}
-  let l=sofById(sid);const m=sn.data();if(!l){l=normalizeSof(Object.assign({id:sid},m,{events:[],tallyEntries:[]}));R.sofs.push(l)}else{Object.assign(l,m);normalizeSof(l)}
-  S.seen[sid]=true;save();renderHeader();renderTab()}
-function applyEvents(qs,sid){const s=sofById(sid);if(!s)return;const S=SYN(),syn=S.ev[sid]||(S.ev[sid]={});
-  const rem={};qs.forEach(d=>rem[d.id]=d.data());const loc={};s.events.forEach(e=>loc[e.id]=e);const out=[];
-  Object.keys(rem).forEach(id=>{const r=rem[id],l=loc[id];
-    if(!l&&syn[id]!==undefined)return;                       // deleted here, delete not sent yet
-    if(l&&syn[id]!==evHash(l)&&(syn[id]!==undefined||evHash(l)!==hsh(evPay(r)))){out.push(l);return} // local edit pending
-    out.push(Object.assign({},r,{id,photos:l?l.photos:[]}));syn[id]=hsh(evPay(r))});
-  Object.keys(loc).forEach(id=>{if(rem[id])return;if(syn[id]!==undefined&&syn[id]===evHash(loc[id])){delete syn[id];return}out.push(loc[id])});
-  s.events=out;save();renderTab()}
+const metaFromDoc=d=>({vesselId:d.vesselId,created:d.created,voyage:d.voyage||{},holds:d.holds||[],tallies:d.tallies||[],entries:d.entries||[]});
+function applySofs(docs){const S=SYN();
+  docs.forEach(d=>{const id=d._id,l=sofById(id),m=metaFromDoc(d);
+    if(d.del){if(l&&(S.sof[id]===undefined||S.sof[id]===hsh(metaOf(l)))){R.sofs=R.sofs.filter(x=>x.id!==id);if(R.cur===id)R.cur=null}delete S.sof[id];return}
+    if(!l){R.sofs.push(normalizeSof(Object.assign({id},m,{events:[],tallyEntries:[]})));S.sof[id]=hsh(metaOf(sofById(id)));return}
+    const lh=hsh(metaOf(l));
+    if(S.sof[id]===lh||(S.sof[id]===undefined&&lh===hsh(clean(m)))){Object.assign(l,m);normalizeSof(l);S.sof[id]=hsh(metaOf(l))}})}
+function applySofMeta(d,sid){const S=SYN();if(d.del){toast("Bu tally kaptan tarafından silinmiş.");return}
+  let l=sofById(sid);const m=metaFromDoc(d);if(!l){l=normalizeSof(Object.assign({id:sid},m,{events:[],tallyEntries:[]}));R.sofs.push(l)}else{Object.assign(l,m);normalizeSof(l)}
+  S.seen[sid]=true}
+function applyEvents(docs,sid){const s=sofById(sid);if(!s)return;const S=SYN(),syn=S.ev[sid]||(S.ev[sid]={});
+  docs.forEach(d=>{const id=d._id,r=evPay(d),rh=hsh(r),l=s.events.find(e=>e.id===id);
+    if(d.del){if(l&&(syn[id]===undefined||syn[id]===evHash(l)))s.events=s.events.filter(e=>e.id!==id);delete syn[id];return}
+    if(!l){if(syn[id]!==undefined)return;s.events.push(Object.assign({},r,{id,photos:[]}));syn[id]=rh;return}
+    const lh=evHash(l);if(syn[id]!==undefined&&syn[id]!==lh)return;if(syn[id]===undefined&&lh!==rh)return;
+    Object.assign(l,r);syn[id]=rh})}
 const unpack=c=>({id:c.i,tallyId:c.k,holdId:c.h||null,qty:c.q,t:c.t,by:c.b});
-function remoteTally(docs){const adds=new Map(),dels=new Set();docs.sort((a,b)=>(a.at||0)-(b.at||0)).forEach(d=>{(d.add||[]).forEach(c=>adds.set(c.i,unpack(c)));(d.del||[]).forEach(i=>dels.add(i))});
-  return[...adds.values()].filter(x=>!dels.has(x.id))}
-function applyTally(qs,sid){const s=sofById(sid);if(!s)return;const S=SYN(),te=S.te[sid]||{};
-  const docs=[];qs.forEach(d=>docs.push(d.data()));
-  const localIds=new Set(s.tallyEntries.map(x=>x.id));const pendDel=new Set(Object.keys(te).filter(id=>!localIds.has(id)));
-  const pendAdd=s.tallyEntries.filter(x=>!(x.id in te));const remote=remoteTally(docs);const nte={};remote.forEach(x=>nte[x.id]=x.by);
-  s.tallyEntries=remote.filter(x=>!pendDel.has(x.id)).concat(pendAdd.filter(x=>!(x.id in nte)));S.te[sid]=nte;save();renderTab()}
-async function staffFetchOwn(sid){if(!online())return;const {fs}=FB;const S=SYN();
-  try{const me_=me();
-    const [eq,tq]=await Promise.all([fs.getDocs(fs.query(fcol("sofs",sid,"events"),fs.where("by","==",me_))),fs.getDocs(fs.query(fcol("sofs",sid,"tally"),fs.where("by","==",me_)))]);
-    const s=sofById(sid);if(!s)return;
-    const syn=S.ev[sid]||(S.ev[sid]={});const loc={};s.events.forEach(e=>loc[e.id]=e);
-    eq.forEach(d=>{const r=d.data();if(!loc[d.id]&&syn[d.id]===undefined){s.events.push(Object.assign({},r,{id:d.id,photos:[]}));syn[d.id]=hsh(evPay(r))}else if(loc[d.id]&&syn[d.id]===undefined&&evHash(loc[d.id])===hsh(evPay(r)))syn[d.id]=hsh(evPay(r))});
-    const te=S.te[sid]||(S.te[sid]={});const docs=[];tq.forEach(d=>docs.push(d.data()));const remote=remoteTally(docs);
-    const localIds=new Set(s.tallyEntries.map(x=>x.id));
-    remote.forEach(x=>{if(!localIds.has(x.id)&&!(x.id in te)){s.tallyEntries.push(x)}te[x.id]=x.by});
-    save();renderTab()}catch(e){syncErr(e)}}
+function applyTally(docs,sid){const s=sofById(sid);if(!s)return;const S=SYN(),te=S.te[sid]||(S.te[sid]={}),dead=S.dead[sid]||(S.dead[sid]={});
+  const have=new Set(s.tallyEntries.map(x=>x.id));
+  docs.sort((a,b)=>tsKey(a.u)<tsKey(b.u)?-1:1).forEach(d=>{
+    (d.add||[]).forEach(c=>{const x=unpack(c);if(dead[x.id])return;if(!have.has(x.id)){if(x.id in te)return;s.tallyEntries.push(x);have.add(x.id)}te[x.id]=x.by});
+    (d.del||[]).forEach(id=>{dead[id]=1;if(have.has(id)){s.tallyEntries=s.tallyEntries.filter(e=>e.id!==id);have.delete(id)}delete te[id]})})}
+async function staffFetchOwn(sid){const S=SYN();const me_=me();
+  const [ev,tb]=await Promise.all([queryR(fleetPath("sofs",sid),"events",{f:"by",op:"EQUAL",v:me_}),queryR(fleetPath("sofs",sid),"tally",{f:"by",op:"EQUAL",v:me_})]);
+  applyEvents(ev,sid);applyTally(tb,sid);S.seen[sid]=true}
 
-/* ---- push (batched) ---- */
+/* ---- push (batched; marks applied only after the server confirms) ---- */
 function schedulePush(ms){if(!online())return;if(ms==null&&SY.pushT){updateSyncUI();return}clearTimeout(SY.pushT);SY.pushT=setTimeout(()=>{SY.pushT=null;pushNow()},ms==null?(isCap()?8000:15000):ms);updateSyncUI()}
-async function pushNow(){if(!online()||SY.pushing)return;if(isCap()&&!SYN().migrated)return;SY.pushing=true;const {fs}=FB;const S=SYN();const ops=[],marks=[];
-  // marks are applied only after the server confirms the write, so nothing is lost if the app closes while offline
+async function pushNow(){if(!online()||SY.pushing||SY.paused)return;if(isCap()&&!SYN().migrated)return;SY.pushing=true;const S=SYN();const ops=[],marks=[];
   try{
     const mine=x=>isCap()||x.by===me();
     if(isCap()){
       const vids=new Set(R.vessels.map(v=>v.id));const vPend=R.vessels.some(v=>S.vh[v.id]!==hsh(vPay(v)))||Object.keys(S.vh).some(id=>!vids.has(id));
-      if(vPend){const snap=R.vessels.map(v=>[v.id,hsh(vPay(v))]);ops.push({t:"set",ref:fpath("state","vessels"),data:{list:R.vessels.map(vPay)}});
+      if(vPend){const snap=R.vessels.map(v=>[v.id,hsh(vPay(v))]);ops.push({t:"set",path:fleetPath("state","vessels"),data:{list:R.vessels.map(vPay)}});
         marks.push(()=>{S.vh={};snap.forEach(([id,h])=>S.vh[id]=h)})}
-      R.sofs.forEach(s=>{const h=hsh(metaOf(s));if(S.sof[s.id]!==h){ops.push({t:"set",ref:fpath("sofs",s.id),data:metaOf(s)});marks.push(()=>S.sof[s.id]=h)}});
-      const sids=new Set(R.sofs.map(s=>s.id));Object.keys(S.sof).forEach(id=>{if(!sids.has(id)){ops.push({t:"del",ref:fpath("sofs",id)});marks.push(()=>delete S.sof[id])}});
+      R.sofs.forEach(s=>{const h=hsh(metaOf(s));if(S.sof[s.id]!==h){ops.push({t:"set",path:fleetPath("sofs",s.id),data:Object.assign(metaOf(s),{del:false})});marks.push(()=>S.sof[s.id]=h)}});
+      const sids=new Set(R.sofs.map(s=>s.id));Object.keys(S.sof).forEach(id=>{if(!sids.has(id)){ops.push({t:"set",path:fleetPath("sofs",id),data:{del:true}});marks.push(()=>delete S.sof[id])}});
     }
     R.sofs.forEach(s=>{if(!isCap()&&!S.seen[s.id])return;
       const syn=S.ev[s.id]||(S.ev[s.id]={});
       s.events.forEach(e=>{if(!mine(e))return;if(isCap()&&!e.by)e.by="cap";const h=evHash(e);
-        if(syn[e.id]!==h){ops.push({t:"set",ref:fpath("sofs",s.id,"events",e.id),data:evPay(e)});marks.push(()=>syn[e.id]=h)}});
-      const eids=new Set(s.events.map(e=>e.id));Object.keys(syn).forEach(id=>{if(!eids.has(id)){ops.push({t:"del",ref:fpath("sofs",s.id,"events",id)});marks.push(()=>delete syn[id])}});
-      const te=S.te[s.id]||(S.te[s.id]={});
+        if(syn[e.id]!==h){ops.push({t:"set",path:fleetPath("sofs",s.id,"events",e.id),data:Object.assign(evPay(e),{del:false})});marks.push(()=>syn[e.id]=h)}});
+      const eids=new Set(s.events.map(e=>e.id));Object.keys(syn).forEach(id=>{if(!eids.has(id)){ops.push({t:"set",path:fleetPath("sofs",s.id,"events",id),data:{label:"",t:0,note:"",by:isCap()?"cap":me(),del:true}});marks.push(()=>delete syn[id])}});
+      const te=S.te[s.id]||(S.te[s.id]={}),dead=S.dead[s.id]||(S.dead[s.id]={});
       const adds=s.tallyEntries.filter(x=>!(x.id in te)&&mine(x));const lids=new Set(s.tallyEntries.map(x=>x.id));
       const dels=Object.keys(te).filter(id=>!lids.has(id)&&(isCap()||te[id]===me()));
       const groups={};adds.forEach(x=>{const b=x.by||me();(groups[b]=groups[b]||[]).push(x)});
       Object.keys(groups).forEach(b=>{const g=groups[b];for(let i=0;i<g.length;i+=400){const ch=g.slice(i,i+400);
-        ops.push({t:"set",ref:FB.fs.doc(fcol("sofs",s.id,"tally")),data:{by:b,at:Date.now(),add:ch.map(x=>clean({i:x.id,k:x.tallyId,h:x.holdId||null,q:+x.qty,t:x.t,b:x.by||me()})),del:[]}});
+        ops.push({t:"set",path:fleetPath("sofs",s.id,"tally",uid()),data:{by:b,at:Date.now(),add:ch.map(x=>clean({i:x.id,k:x.tallyId,h:x.holdId||null,q:+x.qty,t:x.t,b:x.by||me()})),del:[]}});
         marks.push(()=>ch.forEach(x=>te[x.id]=x.by||me()))}});
-      if(dels.length){ops.push({t:"set",ref:FB.fs.doc(fcol("sofs",s.id,"tally")),data:{by:me(),at:Date.now(),add:[],del:dels}});marks.push(()=>dels.forEach(id=>delete te[id]))}
+      if(dels.length){ops.push({t:"set",path:fleetPath("sofs",s.id,"tally",uid()),data:{by:me(),at:Date.now(),add:[],del:dels}});marks.push(()=>dels.forEach(id=>{delete te[id];dead[id]=1}))}
     });
-    if(!ops.length){SY.last=SY.last||Date.now();SY.pushing=false;updateSyncUI();return}
-    SY.awaiting=true;updateSyncUI();
-    const commits=[];for(let i=0;i<ops.length;i+=450){const b=fs.writeBatch(FB.db);ops.slice(i,i+450).forEach(o=>{if(o.t==="set"){b.set(o.ref,clean(o.data));addBytes(o.data)}else b.delete(o.ref)});commits.push(b.commit())}
-    let timer;const timeout=new Promise((_,rej)=>timer=setTimeout(()=>rej({code:"timeout"}),120000));
-    try{await Promise.race([Promise.all(commits),timeout]);clearTimeout(timer);marks.forEach(f=>f());save();SY.last=Date.now();SY.err="";SY.fatal=false}
-    catch(e){clearTimeout(timer);if(e&&e.code!=="timeout")syncErr(e)}
+    if(ops.length){SY.awaiting=true;updateSyncUI();await commitR(ops);marks.forEach(f=>f());save();SY.last=Date.now();SY.err=""}
+    else SY.last=SY.last||Date.now();
   }catch(e){syncErr(e)}
   SY.awaiting=false;SY.pushing=false;updateSyncUI();
-  if(online()&&pendingCount())schedulePush(isCap()?8000:15000)}
+  if(online()&&!SY.err&&pendingCount())schedulePush(isCap()?8000:15000)}
 
-/* ---- network + status ---- */
-function applyNet(){if(!FB)return;try{SY.paused?FB.fs.disableNetwork(FB.db):FB.fs.enableNetwork(FB.db)}catch(e){}}
+/* ---- status ---- */
+function applyNet(){}
 function pendingCount(){if(!online())return 0;const S=SYN();let n=0;const mine=x=>isCap()||x.by===me();
   R.sofs.forEach(s=>{if(!isCap()&&!S.seen[s.id])return;const te=S.te[s.id]||{},ev=S.ev[s.id]||{};
     s.tallyEntries.forEach(x=>{if(mine(x)&&!(x.id in te))n++});s.events.forEach(e=>{if(mine(e)&&ev[e.id]!==evHash(e))n++})});return n}
@@ -1417,12 +1434,12 @@ function syncText(){if(!online())return"";const n=pendingCount();
   if(SY.paused)return`⏸ Eşitleme duraklatıldı${n?` · ${n} kayıt bekliyor`:""}`;
   if(!navigator.onLine)return`○ İnternet yok · ${n?n+" kayıt bekliyor, bağlantı gelince gider":"kayıtlar telefonda güvende"}`;
   if(n||SY.awaiting)return`↻ Eşitleniyor${n?` · ${n} kayıt`:""}`;
-  return`✓ Eşitlendi${SY.last?" · "+fT(SY.last):""}`}
+  const t=Math.max(SY.last||0,SY.lastPoll||0);return`✓ Eşitlendi${t?" · "+fT(t):""}`}
 function updateSyncUI(){const t=syncText();$$("[data-syncline]").forEach(e=>e.textContent=t);
   const wb=$("#whoBtn");if(wb&&online()){wb.dataset.sync=SY.err?"err":(SY.paused||!navigator.onLine)?"off":(pendingCount()||SY.awaiting)?"busy":"ok"}}
-window.addEventListener("online",()=>{updateSyncUI();schedulePush(1500)});
+window.addEventListener("online",()=>{updateSyncUI();schedulePush(1500);setTimeout(pollNow,1500)});
 window.addEventListener("offline",updateSyncUI);
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden"&&online())pushNow()});
+document.addEventListener("visibilitychange",()=>{if(!online())return;if(document.visibilityState==="hidden")pushNow();else pollNow()});
 setInterval(()=>{if(online())updateSyncUI()},30000);
 
 /* ---- first online login of the captain: choose what to upload ---- */
@@ -1435,19 +1452,19 @@ function migrateSheet(){const host=$("#sheetHost");
   $("#mvGo").onclick=()=>{const keep=new Set([...host.querySelectorAll("[data-mv]")].filter(i=>i.checked).map(i=>i.dataset.mv));
     R.vessels=R.vessels.filter(v=>keep.has(v.id));R.sofs=R.sofs.filter(s=>keep.has(s.vesselId));if(!cur())R.cur=null;
     R.vessels.forEach(v=>{if(!v.activeSof){const l=R.sofs.filter(s=>s.vesselId===v.id).sort((a,b)=>b.created-a.created)[0];if(l)v.activeSof=l.id}});
-    R.example=false;SYN().migrated=true;save();host.innerHTML="";renderAll();toast("Aktarım başladı. İnternet varken birkaç saniye sürer.");pushNow()}}
+    R.example=false;SYN().migrated=true;save();host.innerHTML="";renderAll();toast("Aktarım başladı. İnternet varken birkaç saniye sürer.");pushNow().then(pollNow)}}
 
 /* ---- staff accounts (created by the captain) ---- */
 async function createStaffAccount(v,m,user,pw){user=String(user||"").trim().toLowerCase();
   if(!/^[a-z0-9._-]{3,30}$/.test(user))throw{code:"x",message:"Kullanıcı adı en az 3 karakter olmalı; sadece harf (Türkçe karaktersiz), rakam, nokta, tire."};
   if(String(pw||"").length<6)throw{code:"auth/weak-password"};
-  const {a,au,fs}=FB;const sec=a.getApps().find(x=>x.name==="sec")||a.initializeApp(FBCONF,"sec");const sa=au.getAuth(sec);
+  const {a,au}=FB;const sec=a.getApps().find(x=>x.name==="sec")||a.initializeApp(FBCONF,"sec");const sa=au.getAuth(sec);
   try{await au.setPersistence(sa,au.inMemoryPersistence)}catch(e){}
   let cr;try{cr=await au.createUserWithEmailAndPassword(sa,toEmail(user),pw)}
   catch(e){if(e&&e.code==="auth/email-already-in-use"){try{cr=await au.signInWithEmailAndPassword(sa,toEmail(user),pw)}catch(x){throw{code:"x",message:"Bu kullanıcı adı daha önce başka bir şifreyle açılmış. Farklı bir kullanıcı adı deneyin (örn. "+user+"2)."}}}else throw e}
-  await fs.setDoc(fs.doc(FB.db,"users",cr.user.uid),{role:"staff",fleet:SES.fleet,memberId:m.id,vesselId:v.id,name:m.name,username:user});
+  await commitR([{t:"set",path:"users/"+cr.user.uid,data:{role:"staff",fleet:SES.fleet,memberId:m.id,vesselId:v.id,name:m.name,username:user}}]);
   try{await au.signOut(sa)}catch(e){}
-  if(m.uid&&m.uid!==cr.user.uid){try{await fs.deleteDoc(fs.doc(FB.db,"users",m.uid))}catch(e){}}
+  if(m.uid&&m.uid!==cr.user.uid){try{await commitR([{t:"del",path:"users/"+m.uid}])}catch(e){}}
   m.account=user;m.uid=cr.user.uid;save();schedulePush(500)}
 
 /* ---- online login screen ---- */
@@ -1488,7 +1505,7 @@ function renderOnlineLogin(){const L=$("#login");L.hidden=false;
     if(!em.includes("@"))return err("#cErr","Geçerli bir e-posta yazın");if(p1.length<6)return err("#cErr","Şifre en az 6 karakter olmalı");if(p1!==p2)return err("#cErr","Şifreler aynı değil");
     const b=$("#cGo");b.disabled=true;b.textContent="Oluşturuluyor…";SIGNUP=true;
     try{const cr=await FB.au.createUserWithEmailAndPassword(FB.auth,em,p1);
-      await FB.fs.setDoc(FB.fs.doc(FB.db,"users",cr.user.uid),{role:"cap",fleet:cr.user.uid,name:n,email:em});
+      await commitR([{t:"set",path:"users/"+cr.user.uid,data:{role:"cap",fleet:cr.user.uid,name:n,email:em}}]);
       SIGNUP=false;OLV="login";await onlineSignedIn(cr.user)}
     catch(e){SIGNUP=false;err("#cErr",authMsg(e));b.disabled=false;b.textContent="Hesabı oluştur"}};
   if($("#rGo"))$("#rGo").onclick=async()=>{try{await FB.au.sendPasswordResetEmail(FB.auth,$("#rE").value.trim());toast("Yenileme bağlantısı e-postanıza gönderildi");OLV="login";renderOnlineLogin()}catch(e){err("#rErr",authMsg(e))}};
@@ -1506,11 +1523,13 @@ function onlineAccountSheet(){const host=$("#sheetHost"),cap=isCap();
       <input type="password" id="aO" class="pwin" placeholder="Mevcut şifre" autocomplete="current-password"><input type="password" id="aN" class="pwin" placeholder="Yeni şifre (en az 6)" autocomplete="new-password">
       <p class="err" id="aE" hidden></p><button class="btn ghost" id="aS" style="align-self:flex-start">Şifreyi değiştir</button></div>
     ${cap?"":`<button class="btn ghost" id="aQR">İnternet yoksa: kayıtlarımı QR ile gönder</button>`}
+    <button class="lk" id="aReset" style="align-self:flex-start">Eşitlemeyi sıfırla (sorun olursa)</button>
     <div class="row" style="justify-content:space-between"><button class="btn ghost" id="aC">Kapat</button><button class="btn danger" id="aOut">Çıkış yap</button></div></div></div>`;
   $("#aC").onclick=()=>host.innerHTML="";
   $("#aOut").onclick=async()=>{const n=pendingCount();if(n&&!$("#aOut").dataset.c){$("#aOut").dataset.c=1;$("#aOut").textContent=`${n} kayıt henüz gönderilmedi. Yine de çık`;return}onlineLogout()};
-  $("#aNow").onclick=()=>{SY.err="";if(SY.paused){SY.paused=false;try{localStorage.setItem("sof-paused","0")}catch(e){}applyNet();$("#aPause").checked=false}if(SY.fatal)return repairSync();pushNow();updateSyncUI()};
-  $("#aPause").onchange=e=>{SY.paused=e.target.checked;try{localStorage.setItem("sof-paused",SY.paused?"1":"0")}catch(x){}applyNet();updateSyncUI()};
+  $("#aNow").onclick=()=>{SY.err="";if(SY.paused){SY.paused=false;try{localStorage.setItem("sof-paused","0")}catch(e){}$("#aPause").checked=false}syncNow()};
+  $("#aPause").onchange=e=>{SY.paused=e.target.checked;try{localStorage.setItem("sof-paused",SY.paused?"1":"0")}catch(x){}if(!SY.paused)syncNow();updateSyncUI()};
+  $("#aReset").onclick=()=>{if(!$("#aReset").dataset.c){$("#aReset").dataset.c=1;$("#aReset").textContent="Emin misiniz? Tüm kayıtlar yeniden gönderilir";return}repairSync()};
   if(!cap)$("#aQR").onclick=()=>sendSheet();
   $("#aS").onclick=async()=>{const e=$("#aE");try{const u=FB.auth.currentUser;
       await FB.au.reauthenticateWithCredential(u,FB.au.EmailAuthProvider.credential(u.email,$("#aO").value));
