@@ -461,7 +461,8 @@ let R=blankRoot();
 const cur=()=>R.sofs.find(s=>s.id===R.cur)||null;
 const vesselOf=s=>s?R.vessels.find(v=>v.id===s.vesselId)||{name:"?",holds:[],members:[]}:null;
 let SES=null; // {role:"cap"|"staff", id}
-const isCap=()=>!!(SES&&SES.role==="cap");
+const isCap=()=>!!(SES&&(SES.role==="cap"||SES.admin===true));
+const isOwner=()=>!!(SES&&SES.role==="cap");
 const me=()=>SES?(SES.role==="cap"?"cap":SES.id):null;
 const capName=()=>(SES&&SES.online&&SES.role==="cap"&&SES.name)||(R.auth&&R.auth.name)||"Kaptan";
 function mName(v,id){if(id==="cap")return capName();const m=(v.members||[]).find(x=>x.id===id);return m?m.name:"Belirtilmemiş"}
@@ -553,7 +554,7 @@ function membersSheet(vid){const v=R.vessels.find(x=>x.id===vid);const host=$("#
       ${rows.length?`<tr><th>Toplam</th><th style="text-align:right">${sum("ev")}</th><th style="text-align:right">${num(sum("mt"))}</th>${tn.map(n=>`<th style="text-align:right">${num(rows.reduce((a,id)=>a+(((agg[id]||{}).tally||{})[n]||0),0))}</th>`).join("")}</tr>`:""}
       </tbody></table></div>
       <h2 style="margin:6px 0 0">Üye listesi</h2>
-      <div class="hrows">${v.members.map((m,i)=>`<div class="hr"><input data-mn="${i}" value="${esc(m.name)}" aria-label="Ad"><input data-mr="${i}" value="${esc(m.role||"")}" placeholder="Görev" aria-label="Görev"><button class="x" data-mx="${i}" aria-label="Üyeyi çıkar">×</button></div>${online()?(m.account?`<div class="note" style="margin:0 0 8px">🔐 Giriş: <b>${esc(m.account)}</b> <button class="lk" data-acre="${i}" style="padding:0 6px">Yeni hesap aç</button></div>`
+      <div class="hrows">${v.members.map((m,i)=>`<div class="hr"><input data-mn="${i}" value="${esc(m.name)}" aria-label="Ad"><input data-mr="${i}" value="${esc(m.role||"")}" placeholder="Görev" aria-label="Görev"><button class="x" data-mx="${i}" aria-label="Üyeyi çıkar">×</button></div>${online()?(m.account?`<div class="note" style="margin:0 0 8px">🔐 Giriş: <b>${esc(m.account)}</b> <button class="lk" data-acre="${i}" style="padding:0 6px">Yeni hesap aç</button>${isOwner()?`<label style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:14px;color:var(--ink)"><input type="checkbox" data-adm="${i}"${m.admin?" checked":""}> <b>Tam yetki</b> <span class="note" style="margin:0">(kaptan gibi her bölüme erişir)</span></label>`:(m.admin?` · <b>Tam yetkili</b>`:"")}</div>`
   :`<div class="row" style="margin-bottom:8px;gap:6px"><input data-au="${i}" placeholder="kullanıcı adı" autocapitalize="none" style="flex:1.2;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:15px;min-width:0"><input data-ap="${i}" type="password" autocomplete="new-password" placeholder="şifre (en az 6)" style="flex:1;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:15px;min-width:0"><button class="btn sm pri" data-ac="${i}">Hesap aç</button></div>`)
   :`<input class="pwin" data-mp="${i}" type="password" autocomplete="new-password" placeholder="${m.pw?"🔒 Şifre var · değiştirmek için yeni şifre yazın":"Şifre yok · giriş için şifre belirleyin"}" aria-label="${esc(m.name)} şifresi">`}`).join("")}</div>
       <div class="row"><input id="mN" placeholder="Yeni üye adı" style="flex:2;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px"><input id="mR" placeholder="Görev" style="flex:1.4;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px"><input id="mP" type="password" autocomplete="new-password" placeholder="Şifre" style="flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;font-size:15px"><button class="btn pri" id="mAdd">Ekle</button></div>
@@ -569,6 +570,9 @@ function membersSheet(vid){const v=R.vessels.find(x=>x.id===vid);const host=$("#
       try{await createStaffAccount(v,m,host.querySelector(`[data-au="${i}"]`).value,host.querySelector(`[data-ap="${i}"]`).value);toast(`${esc(m.name)} için hesap açıldı: ${esc(m.account)}`);draw()}
       catch(e){toast(e&&e.code==="x"?e.message:authMsg(e));b.disabled=false;b.textContent="Hesap aç"}});
     host.querySelectorAll("[data-acre]").forEach(b=>b.onclick=()=>{const m=v.members[+b.dataset.acre];m.account="";save();draw()});
+    host.querySelectorAll("[data-adm]").forEach(c=>c.onchange=async()=>{sync();const m=v.members[+c.dataset.adm];c.disabled=true;
+      try{await setAdmin(v,m,c.checked);toast(c.checked?`${esc(m.name)} artık tam yetkili. Uygulamayı yeniden açınca geçerli olur.`:`${esc(m.name)} artık sadece Olay Bas, Kayıt ve Tally’ye erişir.`)}
+      catch(e){c.checked=!c.checked;toast(e&&e.code==="x"?e.message:authMsg(e))}c.disabled=false});
     $("#mAdd").onclick=()=>{sync();const n=$("#mN").value.trim();if(!n)return $("#mN").focus();const pw=$("#mP").value;if(pw&&pw.length<4)return toast("Şifre en az 4 karakter olmalı");
       v.members.push({id:uid(),name:n,role:$("#mR").value.trim(),pw:pw?mkPw(pw):null});save();draw()};
     $("#mClose").onclick=()=>{sync();host.innerHTML="";renderAll()};
@@ -1277,7 +1281,7 @@ function hsh(o){const s=JSON.stringify(o)||"";let h=5381;for(let i=0;i<s.length;
 const clean=o=>JSON.parse(JSON.stringify(o));
 const SYN=()=>{const s=R.sync||(R.sync={});s.vh=s.vh||{};s.sof=s.sof||{};s.ev=s.ev||{};s.te=s.te||{};s.seen=s.seen||{};s.lu=s.lu||{};s.dead=s.dead||{};return s};
 const vPay=v=>({id:v.id,name:v.name||"",imo:v.imo||"",flag:v.flag||"",holds:v.holds||[],activeSof:v.activeSof||null,
-  members:(v.members||[]).map(m=>({id:m.id,name:m.name||"",role:m.role||"",account:m.account||"",uid:m.uid||""}))});
+  members:(v.members||[]).map(m=>({id:m.id,name:m.name||"",role:m.role||"",account:m.account||"",uid:m.uid||"",admin:!!m.admin}))});
 const metaOf=s=>clean({vesselId:s.vesselId,created:s.created,voyage:s.voyage,holds:s.holds,tallies:s.tallies,entries:s.entries});
 const evPay=e=>({label:e.label||"",t:e.t||0,note:e.note||"",by:e.by||"cap"});
 const evHash=e=>hsh(evPay(e));
@@ -1329,24 +1333,25 @@ async function onlineSignedIn(u){let p=null,why="";
   if(!p){toast(why&&why!=="İnternet yok"?why:"Bu kullanıcının profili yok. Kaptan, Üyeler bölümünden bu kişiye “Hesap aç” yapmalı.");try{await FB.au.signOut(FB.auth)}catch(e){}return}
   try{localStorage.setItem("sof-prof-"+u.uid,JSON.stringify(p))}catch(e){}
   if(p.role==="staff"&&R.example){R=blankRoot();normalize(R)}
-  SES={role:p.role==="cap"?"cap":"staff",id:p.role==="cap"?undefined:p.memberId,uid:u.uid,fleet:p.fleet,online:true,name:p.name||"",email:u.email};saveSes();
-  SYN();if(SES.role==="cap"&&!R.vessels.length)R.sync.migrated=true;save();
+  SES={role:p.role==="cap"?"cap":"staff",id:p.role==="cap"?undefined:p.memberId,uid:u.uid,fleet:p.fleet,online:true,name:p.name||"",email:u.email,admin:p.role!=="cap"&&p.admin===true};saveSes();
+  SYN();if(SES.role!=="cap"||!R.vessels.length)R.sync.migrated=true;save();
   startSync();enterApp();
   if(SES.role==="cap"&&!R.sync.migrated)setTimeout(migrateSheet,400)}
 async function onlineLogout(){stopSync();try{if(FB)await FB.au.signOut(FB.auth)}catch(e){}SES=null;saveSes();$("#sheetHost").innerHTML="";renderLogin()}
 
 /* ---- polling (pull) ---- */
-function startSync(){stopSync();if(!syncReady())return;SY.lastCur=R.cur;pollNow().then(()=>schedulePush(1500));
+function startSync(){stopSync();if(!syncReady())return;SY.lastCur=R.cur;refreshProfile();SY.polls=0;pollNow().then(()=>schedulePush(1500));
   SY.pollT=setInterval(()=>{if(document.visibilityState==="visible")pollNow()},isCap()?20000:45000);updateSyncUI()}
 function stopSync(){clearInterval(SY.pollT);clearTimeout(SY.pushT);SY.pollT=null;SY.pushT=null}
 function subscribeActive(){if(!online())return;if(R.cur!==SY.lastCur){SY.lastCur=R.cur;setTimeout(pollNow,50)}}
 function syncNow(){SY.err="";SY.fatal=false;pushNow().then(pollNow);updateSyncUI()}
 const viewHash=()=>{const c=cur();return hsh([R.cur,R.vessels.map(vPay),R.sofs.map(x=>[x.id,metaOf(x)]),c?[c.events.map(evPay),c.tallyEntries.length,c.tallyEntries.reduce((n,e)=>n+(+e.qty||0),0)]:0])};
-async function pollNow(){if(!syncReady()||SY.polling||SY.paused)return;SY.polling=true;const S=SYN();let before="";
+async function pollNow(){if(!syncReady()||SY.polling||SY.paused)return;if(++SY.polls%8===0)refreshProfile();SY.polling=true;const S=SYN();let before="";
   try{before=viewHash();
     const st=await queryR(fleetPath(),"state",sinceQ("state"));
     const vd=st.find(d=>d._id==="vessels");if(vd){applyVessels(vd.list||[]);bump("state",vd.u)}
-    if(isCap()){const ss=await queryR(fleetPath(),"sofs",sinceQ("sofs"));applySofs(ss);ss.forEach(d=>bump("sofs",d.u))}
+    if(isCap()){const ss=await queryR(fleetPath(),"sofs",sinceQ("sofs"));applySofs(ss);ss.forEach(d=>bump("sofs",d.u));
+      if(!R.cur||!sofById(R.cur)){const mv=R.vessels.find(v=>v.activeSof&&sofById(v.activeSof));if(mv)R.cur=mv.activeSof}}
     else if(R.cur){const sid=R.cur;
       if(!S.seen[sid]){const d=await getDocR(fleetPath("sofs",sid));if(d){applySofMeta(d,sid);bump("sofs",d.u)}await staffFetchOwn(sid)}
       else{const ss=await queryR(fleetPath(),"sofs",sinceQ("sofs"));ss.forEach(d=>{if(d._id===R.cur||sofById(d._id))applySofMeta(d,d._id);bump("sofs",d.u)})}}
@@ -1471,6 +1476,15 @@ function migrateSheet(){const host=$("#sheetHost");
     R.vessels.forEach(v=>{if(!v.activeSof){const l=R.sofs.filter(s=>s.vesselId===v.id).sort((a,b)=>b.created-a.created)[0];if(l)v.activeSof=l.id}});
     R.example=false;SYN().migrated=true;save();host.innerHTML="";renderAll();toast("Aktarım başladı. İnternet varken birkaç saniye sürer.");pushNow().then(pollNow)}}
 
+/* ---- full authority (captain only) ---- */
+async function setAdmin(v,m,on){if(!syncReady())throw{code:"x",message:"Yetki vermek için internet gerekiyor."};
+  if(!m.uid)throw{code:"x",message:"Önce bu kişiye hesap açın."};
+  await commitR([{t:"set",path:"users/"+m.uid,data:{role:"staff",fleet:SES.fleet,memberId:m.id,vesselId:v.id,name:m.name,username:m.account||"",admin:!!on}}]);
+  m.admin=!!on;save();schedulePush(500)}
+async function refreshProfile(){if(!syncReady()||isOwner())return;try{const p=await getDocR("users/"+SES.uid);if(!p)return;
+  try{localStorage.setItem("sof-prof-"+SES.uid,JSON.stringify(p))}catch(e){}
+  const adm=p.admin===true;if(adm!==!!SES.admin){SES.admin=adm;saveSes();if(adm)SYN().migrated=true;save();toast(adm?"Kaptan size tam yetki verdi.":"Tam yetkiniz kaldırıldı.");enterApp()}}catch(e){}}
+
 /* ---- staff accounts (created by the captain) ---- */
 async function createStaffAccount(v,m,user,pw){user=String(user||"").trim().toLowerCase();
   if(!/^[a-z0-9._-]{3,30}$/.test(user))throw{code:"x",message:"Kullanıcı adı en az 3 karakter olmalı; sadece harf (Türkçe karaktersiz), rakam, nokta, tire."};
@@ -1533,7 +1547,7 @@ function renderOnlineLogin(){const L=$("#login");L.hidden=false;
 function onlineAccountSheet(){const host=$("#sheetHost"),cap=isCap();
   const kb=bytesSent/1024;
   host.innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Hesap"><h3>${esc(mName(vesselOf(cur())||{members:[]},me()))}</h3>
-    <p class="note" style="margin:0">${cap?"Kaptan":"Personel"} · ${esc(SES.email||"")}</p>
+    <p class="note" style="margin:0">${isOwner()?"Kaptan":cap?"Tam yetkili personel":"Personel"} · ${esc(SES.email||"")}</p>
     <div class="banner" style="margin:0;flex-direction:column;align-items:flex-start;gap:6px"><b data-syncline>${esc(syncText())}</b>
       <span class="note" style="margin:0">Bu telefondan gönderilen veri (yaklaşık): ${kb<1024?num(Math.round(kb))+" KB":num(Math.round(kb/102.4)/10)+" MB"}</span>
       <div class="row"><button class="btn sm dark" id="aNow">Şimdi eşitle</button><label class="row" style="gap:6px;font-size:14px"><input type="checkbox" id="aPause"${SY.paused?" checked":""}> Eşitlemeyi duraklat</label></div></div>

@@ -6,31 +6,32 @@ service cloud.firestore {
     function hasProf() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
     function inFleet(f) { return hasProf() && prof().fleet == f; }
     function isCap(f) { return signedIn() && request.auth.uid == f; }
+    function isAdm(f) { return inFleet(f) && prof().get('admin', false) == true; }
+    function canManage(f) { return isCap(f) || isAdm(f); }
 
-    // Profiles: a captain creates his own; the captain creates his staff profiles.
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || resource.data.fleet == request.auth.uid);
+      allow read: if signedIn() && (request.auth.uid == uid || resource.data.fleet == request.auth.uid || isAdm(resource.data.fleet));
       allow create: if signedIn() && (
         (request.auth.uid == uid && request.resource.data.role == 'cap' && request.resource.data.fleet == uid) ||
-        (request.resource.data.role == 'staff' && request.resource.data.fleet == request.auth.uid));
-      allow update, delete: if signedIn() && resource.data.fleet == request.auth.uid;
+        (request.resource.data.role == 'staff' && request.resource.data.fleet == request.auth.uid) ||
+        (request.resource.data.role == 'staff' && isAdm(request.resource.data.fleet) && request.resource.data.get('admin', false) != true));
+      allow update: if signedIn() && (resource.data.fleet == request.auth.uid ||
+        (isAdm(resource.data.fleet) && resource.data.get('admin', false) != true && request.resource.data.get('admin', false) != true
+         && request.resource.data.role == 'staff' && request.resource.data.fleet == resource.data.fleet));
+      allow delete: if signedIn() && (resource.data.fleet == request.auth.uid || (isAdm(resource.data.fleet) && resource.data.get('admin', false) != true));
     }
-
-    // Everything of a ship's crew lives under fleets/{captainUid}. Crew can read, only the captain writes...
     match /fleets/{f}/{document=**} {
       allow read: if inFleet(f);
-      allow write: if isCap(f);
+      allow write: if canManage(f);
     }
-    // ...except staff may write their own events...
     match /fleets/{f}/sofs/{s}/events/{e} {
-      allow create: if inFleet(f) && (isCap(f) || request.resource.data.by == prof().memberId);
-      allow update: if isCap(f) || (inFleet(f) && resource.data.by == prof().memberId && request.resource.data.by == prof().memberId);
-      allow delete: if isCap(f) || (inFleet(f) && resource.data.by == prof().memberId);
+      allow create: if inFleet(f) && (canManage(f) || request.resource.data.by == prof().memberId);
+      allow update: if canManage(f) || (inFleet(f) && resource.data.by == prof().memberId && request.resource.data.by == prof().memberId);
+      allow delete: if canManage(f) || (inFleet(f) && resource.data.by == prof().memberId);
     }
-    // ...and add their own tally batches.
     match /fleets/{f}/sofs/{s}/tally/{b} {
-      allow create: if inFleet(f) && (isCap(f) || request.resource.data.by == prof().memberId);
-      allow update, delete: if isCap(f);
+      allow create: if inFleet(f) && (canManage(f) || request.resource.data.by == prof().memberId);
+      allow update, delete: if canManage(f);
     }
   }
 }
