@@ -1005,7 +1005,7 @@ const checkPw=(o,pw)=>!!(o&&o.salt&&hashPw(pw,o.salt)===o.hash);
 
 /* ---------- session ---------- */
 function saveSes(){try{SES?localStorage.setItem("sof-ses",JSON.stringify(SES)):localStorage.removeItem("sof-ses")}catch(e){}}
-function loadSes(){try{const x=JSON.parse(localStorage.getItem("sof-ses")||"null");if(!x||x.online||!R.auth)return null;
+function loadSes(){try{const x=JSON.parse(localStorage.getItem("sof-ses")||"null");if(x&&x.online)return(x.uid&&x.fleet)?x:null;if(!x||!R.auth)return null;
   if(x.role==="cap")return x;const m=findMember(x.id);return m&&m.m.pw?x:null}catch(e){return null}}
 function findMember(id){for(const v of R.vessels){const m=(v.members||[]).find(x=>x.id===id);if(m)return{v,m}}return null}
 function enterApp(){$("#login").hidden=true;renderHeader();
@@ -1242,7 +1242,23 @@ const FSBASE="https://firestore.googleapis.com/v1/"+FSNAME;
 let FB=null,LOGINMODE="online",SIGNUP=false;
 const SY={pollT:null,pushT:null,pushing:false,polling:false,awaiting:false,last:null,lastPoll:null,err:"",paused:false,fatal:false,lastCur:undefined};
 try{SY.paused=localStorage.getItem("sof-paused")==="1"}catch(e){}
-const online=()=>!!(SES&&SES.online&&FB);
+const online=()=>!!(SES&&SES.online);
+const syncReady=()=>!!(online()&&FB&&FB.auth&&FB.auth.currentUser&&FB.auth.currentUser.uid===SES.uid);
+// load the Firebase sign-in library; also callable later (e.g. when the internet comes back)
+const FBVERS=["11.0.2","10.14.1"];
+async function loadFirebase(){if(window.FBX)return true;
+  for(const V of FBVERS){const B="https://www.gstatic.com/firebasejs/"+V+"/";
+    try{const [a,au]=await Promise.all([import(B+"firebase-app.js"),import(B+"firebase-auth.js")]);window.FBX={a,au,V};return true}catch(e){}}
+  return false}
+// background start for a session restored from this phone (works offline)
+let BG=false;
+async function bgFirebase(){if(BG||inFrame)return;BG=true;
+  const ok=window.FBX||await fbWait(8000)||await loadFirebase();BG=false;if(!ok){updateSyncUI();return}
+  try{fbInit()}catch(e){return}
+  FB.au.onAuthStateChanged(FB.auth,u=>{if(!online())return authChanged(u);
+    if(u&&u.uid===SES.uid){if(!SY.pollT)startSync();updateSyncUI()}
+    else if(!u){SY.err="Eşitleme için yeniden giriş gerekiyor (sağ üstten Çıkış yap → Giriş)";updateSyncUI()}
+    else authChanged(u)})}
 function fbWait(ms){return new Promise(res=>{if(window.FBX)return res(true);if(window.FBX_ERR)return res(false);
   const t=setTimeout(()=>res(false),ms);window.addEventListener("fbx-ready",()=>{clearTimeout(t);res(true)},{once:true});window.addEventListener("fbx-fail",()=>{clearTimeout(t);res(false)},{once:true})})}
 function fbInit(){if(FB||!window.FBX)return FB;const {a,au}=window.FBX;const app=a.initializeApp(FBCONF);FB={a,au,app,auth:au.getAuth(app)};
@@ -1313,20 +1329,20 @@ async function onlineSignedIn(u){let p=null,why="";
   if(!p){toast(why&&why!=="İnternet yok"?why:"Bu kullanıcının profili yok. Kaptan, Üyeler bölümünden bu kişiye “Hesap aç” yapmalı.");try{await FB.au.signOut(FB.auth)}catch(e){}return}
   try{localStorage.setItem("sof-prof-"+u.uid,JSON.stringify(p))}catch(e){}
   if(p.role==="staff"&&R.example){R=blankRoot();normalize(R)}
-  SES={role:p.role==="cap"?"cap":"staff",id:p.role==="cap"?undefined:p.memberId,uid:u.uid,fleet:p.fleet,online:true,name:p.name||"",email:u.email};
+  SES={role:p.role==="cap"?"cap":"staff",id:p.role==="cap"?undefined:p.memberId,uid:u.uid,fleet:p.fleet,online:true,name:p.name||"",email:u.email};saveSes();
   SYN();if(SES.role==="cap"&&!R.vessels.length)R.sync.migrated=true;save();
   startSync();enterApp();
   if(SES.role==="cap"&&!R.sync.migrated)setTimeout(migrateSheet,400)}
-async function onlineLogout(){stopSync();try{await FB.au.signOut(FB.auth)}catch(e){}SES=null;saveSes();$("#sheetHost").innerHTML="";renderLogin()}
+async function onlineLogout(){stopSync();try{if(FB)await FB.au.signOut(FB.auth)}catch(e){}SES=null;saveSes();$("#sheetHost").innerHTML="";renderLogin()}
 
 /* ---- polling (pull) ---- */
-function startSync(){stopSync();SY.lastCur=R.cur;pollNow().then(()=>schedulePush(1500));
+function startSync(){stopSync();if(!syncReady())return;SY.lastCur=R.cur;pollNow().then(()=>schedulePush(1500));
   SY.pollT=setInterval(()=>{if(document.visibilityState==="visible")pollNow()},isCap()?20000:45000);updateSyncUI()}
 function stopSync(){clearInterval(SY.pollT);clearTimeout(SY.pushT);SY.pollT=null;SY.pushT=null}
 function subscribeActive(){if(!online())return;if(R.cur!==SY.lastCur){SY.lastCur=R.cur;setTimeout(pollNow,50)}}
 function syncNow(){SY.err="";SY.fatal=false;pushNow().then(pollNow);updateSyncUI()}
 const viewHash=()=>{const c=cur();return hsh([R.cur,R.vessels.map(vPay),R.sofs.map(x=>[x.id,metaOf(x)]),c?[c.events.map(evPay),c.tallyEntries.length,c.tallyEntries.reduce((n,e)=>n+(+e.qty||0),0)]:0])};
-async function pollNow(){if(!online()||SY.polling||SY.paused)return;SY.polling=true;const S=SYN();let before="";
+async function pollNow(){if(!syncReady()||SY.polling||SY.paused)return;SY.polling=true;const S=SYN();let before="";
   try{before=viewHash();
     const st=await queryR(fleetPath(),"state",sinceQ("state"));
     const vd=st.find(d=>d._id==="vessels");if(vd){applyVessels(vd.list||[]);bump("state",vd.u)}
@@ -1394,7 +1410,7 @@ async function staffFetchOwn(sid){const S=SYN();const me_=me();
 
 /* ---- push (batched; marks applied only after the server confirms) ---- */
 function schedulePush(ms){if(!online())return;if(ms==null&&SY.pushT){updateSyncUI();return}clearTimeout(SY.pushT);SY.pushT=setTimeout(()=>{SY.pushT=null;pushNow()},ms==null?(isCap()?8000:15000):ms);updateSyncUI()}
-async function pushNow(){if(!online()||SY.pushing||SY.paused)return;if(isCap()&&!SYN().migrated)return;SY.pushing=true;const S=SYN();const ops=[],marks=[];
+async function pushNow(){if(!syncReady()||SY.pushing||SY.paused)return;if(isCap()&&!SYN().migrated)return;SY.pushing=true;const S=SYN();const ops=[],marks=[];
   try{
     const mine=x=>isCap()||x.by===me();
     if(isCap()){
@@ -1430,6 +1446,7 @@ function pendingCount(){if(!online())return 0;const S=SYN();let n=0;const mine=x
   R.sofs.forEach(s=>{if(!isCap()&&!S.seen[s.id])return;const te=S.te[s.id]||{},ev=S.ev[s.id]||{};
     s.tallyEntries.forEach(x=>{if(mine(x)&&!(x.id in te))n++});s.events.forEach(e=>{if(mine(e)&&ev[e.id]!==evHash(e))n++})});return n}
 function syncText(){if(!online())return"";const n=pendingCount();
+  if(!syncReady()&&!SY.err)return navigator.onLine?`↻ Bağlanıyor…${n?` · ${n} kayıt bekliyor`:""}`:`○ İnternet yok · ${n?n+" kayıt telefonda bekliyor, bağlantı gelince gider":"kayıtlar telefonda güvende"}`;
   if(SY.err)return"⚠ "+SY.err;
   if(SY.paused)return`⏸ Eşitleme duraklatıldı${n?` · ${n} kayıt bekliyor`:""}`;
   if(!navigator.onLine)return`○ İnternet yok · ${n?n+" kayıt bekliyor, bağlantı gelince gider":"kayıtlar telefonda güvende"}`;
@@ -1437,7 +1454,7 @@ function syncText(){if(!online())return"";const n=pendingCount();
   const t=Math.max(SY.last||0,SY.lastPoll||0);return`✓ Eşitlendi${t?" · "+fT(t):""}`}
 function updateSyncUI(){const t=syncText();$$("[data-syncline]").forEach(e=>e.textContent=t);
   const wb=$("#whoBtn");if(wb&&online()){wb.dataset.sync=SY.err?"err":(SY.paused||!navigator.onLine)?"off":(pendingCount()||SY.awaiting)?"busy":"ok"}}
-window.addEventListener("online",()=>{updateSyncUI();schedulePush(1500);setTimeout(pollNow,1500)});
+window.addEventListener("online",()=>{updateSyncUI();if(online()&&!syncReady())bgFirebase();schedulePush(1500);setTimeout(pollNow,1500)});
 window.addEventListener("offline",updateSyncUI);
 document.addEventListener("visibilitychange",()=>{if(!online())return;if(document.visibilityState==="hidden")pushNow();else pollNow()});
 setInterval(()=>{if(online())updateSyncUI()},30000);
@@ -1458,6 +1475,7 @@ function migrateSheet(){const host=$("#sheetHost");
 async function createStaffAccount(v,m,user,pw){user=String(user||"").trim().toLowerCase();
   if(!/^[a-z0-9._-]{3,30}$/.test(user))throw{code:"x",message:"Kullanıcı adı en az 3 karakter olmalı; sadece harf (Türkçe karaktersiz), rakam, nokta, tire."};
   if(String(pw||"").length<6)throw{code:"auth/weak-password"};
+  if(!syncReady())throw{code:"x",message:"Hesap açmak için internet gerekiyor."};
   const {a,au}=FB;const sec=a.getApps().find(x=>x.name==="sec")||a.initializeApp(FBCONF,"sec");const sa=au.getAuth(sec);
   try{await au.setPersistence(sa,au.inMemoryPersistence)}catch(e){}
   let cr;try{cr=await au.createUserWithEmailAndPassword(sa,toEmail(user),pw)}
@@ -1531,10 +1549,10 @@ function onlineAccountSheet(){const host=$("#sheetHost"),cap=isCap();
   $("#aPause").onchange=e=>{SY.paused=e.target.checked;try{localStorage.setItem("sof-paused",SY.paused?"1":"0")}catch(x){}if(!SY.paused)syncNow();updateSyncUI()};
   $("#aReset").onclick=()=>{if(!$("#aReset").dataset.c){$("#aReset").dataset.c=1;$("#aReset").textContent="Emin misiniz? Tüm kayıtlar yeniden gönderilir";return}repairSync()};
   if(!cap)$("#aQR").onclick=()=>sendSheet();
-  $("#aS").onclick=async()=>{const e=$("#aE");try{const u=FB.auth.currentUser;
+  $("#aS").onclick=async()=>{const e=$("#aE");try{if(!syncReady())throw{code:"x",message:"Şifre değiştirmek için internet gerekiyor."};const u=FB.auth.currentUser;
       await FB.au.reauthenticateWithCredential(u,FB.au.EmailAuthProvider.credential(u.email,$("#aO").value));
       if($("#aN").value.length<6)throw{code:"auth/weak-password"};await FB.au.updatePassword(u,$("#aN").value);host.innerHTML="";toast("Şifre değiştirildi")}
-    catch(x){e.hidden=false;e.textContent=authMsg(x)}}}
+    catch(x){e.hidden=false;e.textContent=x&&x.code==="x"?x.message:authMsg(x)}}}
 
 /* ---------- account ---------- */
 function accountSheet(){if(online())return onlineAccountSheet();const host=$("#sheetHost");const cap=isCap();
@@ -1646,9 +1664,11 @@ function renderAll(){renderHeader();renderTab()}
 
 /* ---------- boot ---------- */
 openDB().then(load).then(async d=>{const m=migrate(d);R=m||sample();if(!m)save();
-  const ok=!inFrame&&await fbWait(6000);
+  const ls=loadSes();
+  if(ls&&ls.online){SES=ls;enterApp();bgFirebase();return}   // signed in before: open immediately, even offline
+  const ok=!inFrame&&(await fbWait(6000)||await loadFirebase());
   if(ok){try{fbInit();FB.au.onAuthStateChanged(FB.auth,u=>authChanged(u));return}catch(e){FB=null}}
-  SES=loadSes();if(SES)enterApp();else renderLogin()});
+  SES=ls;if(SES)enterApp();else renderLogin()});
 })();
 </script>
 

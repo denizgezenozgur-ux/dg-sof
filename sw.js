@@ -1,5 +1,5 @@
 // DG SOF Defteri – çevrimdışı önbellek. Uygulamayı güncellediğinizde VERSION değerini artırın.
-const VERSION = "dg-sof-v14";
+const VERSION = "dg-sof-v15";
 const FBV = "https://www.gstatic.com/firebasejs/11.0.2/";
 const FBJS = ["firebase-app.js", "firebase-auth.js"].map(f => FBV + f);
 const JSQR = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"; // yedek QR okuyucu (iPhone için)
@@ -34,9 +34,14 @@ self.addEventListener("fetch", e => {
   }
   if (url.origin !== location.origin) return;
   // App pages: network first (gets updates), fall back to cache offline
+  // App page: open instantly from the phone (works offline), refresh the stored copy in the background
   if (req.mode === "navigate") {
-    e.respondWith(fetch(req).then(r => { caches.open(VERSION).then(c => c.put("index.html", r.clone())); return r; })
-      .catch(() => caches.match("index.html")));
+    e.respondWith(caches.open(VERSION).then(async c => {
+      const hit = await c.match("index.html");
+      const net = fetch(req).then(r => { if (r.ok) c.put("index.html", r.clone()); return r; });
+      if (hit) { e.waitUntil(net.catch(() => {})); return hit; }
+      return net.catch(() => caches.match("index.html"));
+    }));
     return;
   }
   e.respondWith(caches.match(req).then(hit => hit || fetch(req)));
