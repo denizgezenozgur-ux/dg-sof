@@ -1,5 +1,5 @@
 // DG SOF Defteri – çevrimdışı önbellek. Uygulamayı güncellediğinizde VERSION değerini artırın.
-const VERSION = "dg-sof-v16";
+const VERSION = "dg-sof-v17";
 const FBV = "https://www.gstatic.com/firebasejs/11.0.2/";
 const FBJS = ["firebase-app.js", "firebase-auth.js"].map(f => FBV + f);
 const JSQR = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"; // yedek QR okuyucu (iPhone için)
@@ -11,7 +11,7 @@ self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE).then(() => Promise.all([c.add(new Request(JSQR, {mode: "no-cors"})).catch(() => {}), ...FBJS.map(u => c.add(u).catch(() => {}))]))).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith("dg-sof-") && k !== VERSION).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 self.addEventListener("fetch", e => {
